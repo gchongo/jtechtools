@@ -730,7 +730,7 @@ function buildRow(widget, m, { animate = false, isReply = false } = {}) {
   li.appendChild(body);
 
   // foot: stats (comment / like / views / time)
-  const foot = el("div", "shoutbox__foot");
+  const foot = el("div", "shoutbox__foot jt-card__foot");
 
   const commentBtn = el("button", "shoutbox__stat-btn jt-card__stat shoutbox__comment-btn");
   commentBtn.type = "button";

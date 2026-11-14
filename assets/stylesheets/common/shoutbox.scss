@@ -1128,7 +1128,10 @@
 }
 
 // page rows: action icons pinned to the right edge of the card
-.shoutbox--page .shoutbox__item.jt-card .jt-card__foot {
+.shoutbox--page .shoutbox__item.jt-card .jt-card__foot,
+.shoutbox--page .shoutbox__item.jt-card .shoutbox__foot {
+  display: flex;
+  align-items: center;
   justify-content: flex-end;
 }
 
