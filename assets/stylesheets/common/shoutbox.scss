@@ -112,27 +112,8 @@
   }
 }
 
-.shoutbox__item {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.6em;
-  padding: 0.5em 0.85em;
-  border-bottom: 1px solid var(--shoutbox-border);
-
-  &:last-child {
-    border-bottom: none;
-  }
-
-  &--new {
-    animation: shoutbox-new 2.5s ease-out;
-  }
-}
-
-.shoutbox__avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  flex-shrink: 0;
+.shoutbox__item--new {
+  animation: shoutbox-new 2.5s ease-out;
 }
 
 .shoutbox__main {
@@ -717,29 +698,6 @@
   top: 0.4em;
 }
 
-// ── replies (comments) ───────────────────────────────────────────────────────
-// Replies render indented under their parent, with a smaller avatar.
-.shoutbox__item--reply {
-  padding-left: calc(1em + 32px + 0.85em);
-}
-
-.shoutbox--page .shoutbox__item--reply {
-  grid-template-columns: 24px 1fr;
-  padding-left: calc(1em + 32px + 0.85em);
-}
-
-.shoutbox__item--reply .shoutbox__avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-}
-
-.shoutbox__item--reply .shoutbox__text {
-  -webkit-line-clamp: unset;
-  display: block;
-  overflow: visible;
-}
-
 // memos-style inline comment box under the row being commented on
 .shoutbox__comment-box {
   display: flex;
@@ -749,10 +707,6 @@
   background: var(--jt-surface-sunken, var(--primary-very-low));
   border-radius: var(--jt-radius-sm, 0.4em);
   padding: 0.6em;
-}
-
-.shoutbox--page .shoutbox__comment-box {
-  grid-column: 2;
 }
 
 .shoutbox__comment-input {
@@ -807,11 +761,6 @@
 }
 
 .shoutbox--page .shoutbox__item {
-  display: grid;
-  grid-template-columns: 32px 1fr;
-  gap: 0 0.85em;
-  padding: 0.9em 1em;
-  border-bottom: 1px solid var(--shoutbox-border);
 
   &:last-child {
     border-bottom: none;
@@ -988,9 +937,7 @@
 .shoutbox__item--pinned {
   background: var(--jt-surface-sunken, var(--primary-very-low));
 
-  .shoutbox__name::before {
-    content: "📌 ";
-  }
+
 }
 
 .shoutbox__editing {
@@ -1024,7 +971,18 @@
 // shoutbox needs on top.
 .shoutbox__item.jt-card {
   position: relative;
+  display: flex;
+  flex-direction: column;
   cursor: default;
+
+  // (0,3,0): out-ranks any legacy .shoutbox--page .shoutbox__item rules that
+  // may still exist in older deployed bundles
+  &.shoutbox--page,
+  .shoutbox--page & {
+    display: flex;
+    flex-direction: column;
+  }
+
   background: var(--jt-surface-raised);
   border: 1px solid var(--jt-border);
   border-radius: var(--jt-radius-lg);
