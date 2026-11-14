@@ -584,8 +584,8 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
 
   // head
   const head = el("div", "shoutbox__head");
-  head.appendChild(el("span", "shoutbox__title", `📝 ${i18n("shoutbox.title")}`));
   if (variant === "panel") {
+    head.appendChild(el("span", "shoutbox__title", `📝 ${i18n("shoutbox.title")}`));
     // Full page: the jtech theme's Quick-look expand icon (jt sprite).
     const open = el("button", "btn btn-flat no-text jt-card__peek shoutbox__open");
     open.type = "button";
@@ -611,8 +611,8 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
     });
     widget.els.plusBtn = plus;
     head.appendChild(plus);
+    mount.appendChild(head);
   }
-  mount.appendChild(head);
 
   // list
   const list = el("ul", "shoutbox__list");
@@ -896,11 +896,13 @@ function buildRow(widget, m, { animate = false, isReply = false } = {}) {
 
   const activity = el("span", "shoutbox__stat-btn jt-card__stat --activity");
   const date = new Date(m.created_at);
-  const time = el("span", "relative-date");
-  time.textContent = relativeAge(date, { format: "tiny" });
-  time.title = date.toLocaleString();
-  activity.appendChild(time);
-  foot.appendChild(activity);
+  if (!isNaN(date.getTime())) {
+    const time = el("span", "relative-date");
+    time.textContent = relativeAge(date, { format: "tiny" });
+    time.title = date.toLocaleString();
+    activity.appendChild(time);
+    foot.appendChild(activity);
+  }
 
   li.appendChild(foot);
 

@@ -606,11 +606,12 @@
 
 .shoutbox-page-grid {
   display: grid;
-  grid-template-columns: minmax(0, 38em) 19em;
+  // feed takes ALL remaining width (1fr) so no slack gutters are left
+  // flanking it; only the sidebar is fixed
+  grid-template-columns: minmax(0, 1fr) 19em;
   gap: 2em;
-  justify-content: center;
   align-items: start;
-  max-width: 64em;
+  max-width: 68em;
   margin: 1em auto 2em;
 
   @media (width < 62em) {
@@ -1100,11 +1101,14 @@
 // row stats share .shoutbox__foot with the composer — strip the composer's
 // surface fill/hairlines so the foot inherits the card background instead of
 // painting a darker strip over it (0,3,0 also out-ranks the composer's
-// .shoutbox--page variants)
+// .shoutbox--page variants). Also tightens the theme's .jt-card__foot
+// padding: the 0.75em top padding read as a big blank band above the stats.
 .shoutbox__item .shoutbox__foot.jt-card__foot {
   background: transparent;
   border-top: none;
   border-bottom: none;
+  margin-top: 0;
+  padding: 0 1em 0.5em;
 }
 
 // counts after the stat icons: smaller and quieter than the icons
