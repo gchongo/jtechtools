@@ -165,7 +165,9 @@
   .shoutbox--page & {
     -webkit-line-clamp: unset;
     display: block;
-    font-size: var(--font-0);
+    // same size as the homepage topic-card body (jt-text-md, 14.9px)
+    font-size: var(--jt-text-md, var(--font-0));
+    line-height: var(--line-height-large, 1.55);
     line-height: 1.45;
   }
 }
@@ -898,9 +900,10 @@
 }
 
 // ── detail page (/shoutbox/m/:id) — X post-detail layout ──
+// the detail host element doubles as the two-column grid (same as the feed
+// page) — main column + sidebar
 .shoutbox-detail-wrap {
-  max-width: 38em;
-  margin: 0 auto;
+  min-height: 60dvh;
 }
 
 .shoutbox-detail {

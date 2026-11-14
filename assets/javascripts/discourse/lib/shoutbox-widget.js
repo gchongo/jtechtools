@@ -1354,7 +1354,7 @@ function renderSide(widget) {
 
   // search box — built once per widget; it must survive renderSide rebuilds
   // or typing would wipe focus and text
-  if (!widget.els.searchCard) {
+  if (!widget.els.searchCard && !widget.noSearch) {
     const card = el("div", "shoutbox-side__card shoutbox-side__card--search");
     const box = el("div", "shoutbox-side__search");
     const icon = el("span", "shoutbox-side__search-icon");
@@ -1488,7 +1488,11 @@ function renderSide(widget) {
     el("p", "shoutbox-side__text", i18n("shoutbox.side_about", { n: messages.size })),
   );
 
-  const cards = [widget.els.searchCard, whatsNew, suggested];
+  const cards = [
+    ...(widget.noSearch ? [] : [widget.els.searchCard]),
+    whatsNew,
+    suggested,
+  ];
   if (widget.els.tagsCard) {
     cards.push(widget.els.tagsCard);
   }
@@ -1535,8 +1539,10 @@ function appendExcerptContent(parent, text) {
 
 // Scroll a message row into view and flash it (sidebar What's-new clicks).
 function jumpToMessage(widget, id) {
-  const row = widget.els.list.querySelector(`[data-id="${id}"]`);
+  const row = widget.els.list?.querySelector(`[data-id="${id}"]`);
   if (!row) {
+    // no feed rows here (detail-page sidebar) — open the message's page
+    DiscourseURL.routeTo(`/shoutbox/m/${id}`);
     return;
   }
   row.scrollIntoView({ block: "center" });
@@ -2062,8 +2068,36 @@ export function mountShoutboxDetail(rootEl, { id }) {
   const state = { destroyed: false };
   id = Number(id);
 
+  // two-column layout like the feed page: detail column + the same sidebar
+  // widgets (What's new / Suggested / Tags / Most active / About)
+  rootEl.classList.add("shoutbox-page-grid");
   const wrap = el("div", "shoutbox-detail");
   rootEl.appendChild(wrap);
+  const side = el("aside", "shoutbox-side");
+  rootEl.appendChild(side);
+  const sideWidget = {
+    rootEl,
+    variant: "detail",
+    els: { side },
+    noSearch: true, // the feed-side search has no feed to filter here
+    destroyed: false,
+    // registered in the shared widgets set, so bus events and the 60s poll
+    // will call the feed widget API on it — these are intentional no-ops
+    refresh: () => {},
+    appendRow: () => {},
+    insertReplyRow: () => {},
+    updateRow: () => {},
+    removeRow: () => {},
+    showError: () => {},
+  };
+  const tagsCard = el("div", "shoutbox-side__card shoutbox-side__card--tags");
+  tagsCard.hidden = true;
+  tagsCard.appendChild(el("div", "shoutbox-side__title", i18n("shoutbox.side_tags")));
+  sideWidget.els.tagsList = el("div", "shoutbox-side__tag-list");
+  tagsCard.appendChild(sideWidget.els.tagsList);
+  sideWidget.els.tagsCard = tagsCard;
+  side.appendChild(tagsCard);
+  widgets.add(sideWidget);
 
   // invalid/missing id (bad URL) — render the failure state, skip the fetch
   if (!Number.isFinite(id) || id <= 0) {
@@ -2160,6 +2194,23 @@ export function mountShoutboxDetail(rootEl, { id }) {
     }
   });
 
+  // sidebar data: recent messages + viewer (independent of the detail fetch)
+  ajax("/shoutbox/messages.json")
+    .then((payload) => {
+      if (state.destroyed) {
+        return;
+      }
+      viewer = payload.viewer || viewer;
+      (payload.messages || []).forEach((m) => {
+        if (!messages.has(m.id)) {
+          messages.set(m.id, m);
+        }
+      });
+      renderSide(sideWidget);
+      fillTagsCard(sideWidget);
+    })
+    .catch(() => {});
+
   ajax(`/shoutbox/messages/${id}.json`)
     .then((payload) => {
       if (state.destroyed) {
@@ -2231,7 +2282,14 @@ export function mountShoutboxDetail(rootEl, { id }) {
       }
     });
 
-  return { rootEl, destroy: () => (state.destroyed = true) };
+  return {
+    rootEl,
+    destroy: () => {
+      state.destroyed = true;
+      widgets.delete(sideWidget);
+      rootEl.classList.remove("shoutbox-page-grid");
+    },
+  };
 }
 
 export function unmountShoutboxDetail(widget) {
