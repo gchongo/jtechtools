@@ -21,6 +21,10 @@ register_asset "stylesheets/common/shoutbox.scss"
   xmark
   arrow-up-right-from-square
   compass
+  bold
+  italic
+  heading
+  list-ul
   reply
   heart
   far-heart

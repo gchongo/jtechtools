@@ -301,7 +301,7 @@ const appendTextWithMentions = (parent, text) => {
       a.textContent = part;
       parent.appendChild(a);
     } else {
-      appendTextWithTag(parent, part);
+      appendTextWithMD(parent, part);
     }
   });
 };
@@ -322,10 +322,25 @@ function appendTextWithTag(parent, text) {
       a.textContent = part;
       parent.appendChild(a);
     } else {
-      parent.appendChild(document.createTextNode(part));
+      appendTextWithMD(parent, part);
     }
   });
 }
+
+// Inline markdown: bold / inline code / italic.
+function appendTextWithMD(parent, text) {
+  text.split(MD_SPLIT).forEach((part) => {
+    if (!part) {
+      return;
+    }
+    if (/^\*\*[^*]+\*\*$/.test(part)) {
+      parent.appendChild(el("strong", null, part.slice(2, -2)));
+    } else {
+      appendTextWithMD(parent, part);
+    }
+  });
+}
+
 
 const appendTextWithEmoji = (parent, text) => {
   text.split(EMOJI_SPLIT).forEach((part) => {
@@ -349,7 +364,7 @@ const appendTextWithEmoji = (parent, text) => {
   });
 };
 
-const QUOTE_SPLIT = /(\[quote="([^"]*)"\]([\s\S]*?)\[\/quote\])/g;
+const QUOTE_SPLIT = /(\[quote(?:="([^"]*)")?\]([\s\S]*?)\[\/quote\])/g;
 
 // Splits quote blocks out first, then URLs, so nothing mangles anything else.
 const renderRichText = (parent, text) => {
@@ -357,28 +372,84 @@ const renderRichText = (parent, text) => {
     if (!part) {
       return;
     }
-    const q = part.match(/^\[quote="([^"]*)"\]([\s\S]*)\[\/quote\]$/);
+    const q =
+      part.match(/^\[quote="([^"]*)"\]([\s\S]*)\[\/quote\]$/) ||
+      part.match(/^\[quote\]([\s\S]*)\[\/quote\]$/);
     if (q) {
       const bq = el("blockquote", "shoutbox__quote");
-      bq.appendChild(el("div", "shoutbox__quote-author", `@${q[1]}`));
+      if (q[1]) {
+        bq.appendChild(el("div", "shoutbox__quote-author", `@${q[1]}`));
+      }
       const body = el("div", "shoutbox__quote-body");
       renderRichText(body, q[2].trim());
       bq.appendChild(body);
       parent.appendChild(bq);
       return;
     }
-    part.split(URL_SPLIT).forEach((seg) => {
-      if (!seg) {
-        return;
-      }
-      if (/^https?:\/\//.test(seg)) {
-        appendUrlNode(parent, seg);
-      } else {
-        appendTextWithEmoji(parent, seg);
-      }
-    });
+    renderLines(parent, part);
   });
 };
+
+// Line-level markdown: headings (# ## ###), bullet lists (- ), paragraphs.
+function renderLines(parent, text) {
+  const lines = text.split("\n");
+  let list = null;
+  const flushList = () => {
+    if (list) {
+      parent.appendChild(list);
+      list = null;
+    }
+  };
+  lines.forEach((line) => {
+    const h = line.match(/^(#{1,3})\s+(.+)$/);
+    const li = line.match(/^[-*]\s+(.+)$/);
+    if (h) {
+      flushList();
+      const hd = el(
+        "div",
+        `shoutbox__heading shoutbox__heading--${Math.min(h[1].length + 1, 4)}`,
+      );
+      renderInline(hd, h[2]);
+      parent.appendChild(hd);
+    } else if (li) {
+      if (!list) {
+        list = el("div", "shoutbox__list-block");
+      }
+      const item = el("div", "shoutbox__list-item");
+      item.appendChild(document.createTextNode("\u2022 "));
+      renderInline(item, li[1]);
+      list.appendChild(item);
+    } else {
+      flushList();
+      const p = el("div", "shoutbox__line");
+      if (line) {
+        renderInline(p, line);
+      }
+      parent.appendChild(p);
+    }
+  });
+  flushList();
+}
+
+// Inline markdown: bold / italic / inline code, then the existing chain.
+const MD_SPLIT = /(\*\*[^*]+\*\*|`[^`\n]+`|\*[^*\n]+\*)/g;
+
+function renderInline(parent, text) {
+  text.split(MD_SPLIT).forEach((part) => {
+    if (!part) {
+      return;
+    }
+    if (/^\*\*[^*]+\*\*$/.test(part)) {
+      parent.appendChild(el("strong", null, part.slice(2, -2)));
+    } else if (/^`[^`\n]+`$/.test(part)) {
+      parent.appendChild(el("code", "shoutbox__code", part.slice(1, -1)));
+    } else if (/^\*[^*\n]+\*$/.test(part)) {
+      parent.appendChild(el("em", null, part.slice(1, -1)));
+    } else {
+      appendTextWithEmoji(parent, part);
+    }
+  });
+}
 
 // ── widget ───────────────────────────────────────────────────────────────────
 
@@ -395,6 +466,37 @@ const insertAtCursor = (textarea, text) => {
   textarea.setSelectionRange(pos, pos);
   textarea.focus();
 };
+
+// Wraps the textarea selection (or inserts an empty pair at the caret).
+function wrapSelection(widget, before, after) {
+  const ta = widget.els.composer;
+  if (!ta) {
+    return;
+  }
+  const start = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? ta.value.length;
+  const sel = ta.value.slice(start, end);
+  ta.value = ta.value.slice(0, start) + before + sel + after + ta.value.slice(end);
+  const pos = start + before.length + sel.length;
+  ta.setSelectionRange(pos - after.length, pos - after.length);
+  ta.focus();
+  ta.dispatchEvent(new Event("input"));
+}
+
+// Prefixes the current line (headings, bullet lists).
+function prefixLine(widget, prefix) {
+  const ta = widget.els.composer;
+  if (!ta) {
+    return;
+  }
+  const start = ta.selectionStart ?? ta.value.length;
+  const lineStart = ta.value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+  ta.value = ta.value.slice(0, lineStart) + prefix + ta.value.slice(lineStart);
+  const pos = start + prefix.length;
+  ta.setSelectionRange(pos, pos);
+  ta.focus();
+  ta.dispatchEvent(new Event("input"));
+}
 
 const el = (tag, cls, text) => {
   const node = document.createElement(tag);
@@ -1125,6 +1227,25 @@ function buildComposerInto(widget, host) {
   const bar = el("div", "shoutbox__composer-bar");
   const icons = el("div", "shoutbox__composer-icons");
 
+  const fmtBtn = (iconName, titleKey, fn) => {
+    const b = el("button", "shoutbox__composer-btn");
+    b.type = "button";
+    b.title = i18n(titleKey);
+    b.setAttribute("aria-label", i18n(titleKey));
+    b.innerHTML = iconHTML(iconName);
+    b.addEventListener("click", () => fn());
+    icons.appendChild(b);
+    return b;
+  };
+
+  fmtBtn("bold", "shoutbox.bold", () => wrapSelection(widget, "**", "**"));
+  fmtBtn("italic", "shoutbox.italic", () => wrapSelection(widget, "*", "*"));
+  fmtBtn("heading", "shoutbox.heading", () => prefixLine(widget, "## "));
+  fmtBtn("list-ul", "shoutbox.list", () => prefixLine(widget, "- "));
+  fmtBtn("quote-right", "shoutbox.quote", () =>
+    wrapSelection(widget, "[quote]\n", "\n[/quote]\n"),
+  );
+
   const emojiBtn = el("button", "shoutbox__composer-btn shoutbox__emoji-btn");
   emojiBtn.type = "button";
   emojiBtn.title = i18n("shoutbox.emoji_picker");
@@ -1268,6 +1389,15 @@ function buildComposerInto(widget, host) {
   ta.addEventListener("click", closeMention);
   ta.addEventListener("blur", () => setTimeout(closeMention, 150));
   ta.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && ["b", "i"].includes(event.key.toLowerCase())) {
+      event.preventDefault();
+      if (event.key.toLowerCase() === "b") {
+        wrapSelection(widget, "**", "**");
+      } else {
+        wrapSelection(widget, "*", "*");
+      }
+      return;
+    }
     if (!mentionPop.hidden) {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();

@@ -353,6 +353,15 @@
   min-width: 0;
 }
 
+.shoutbox__composer-icons {
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 .shoutbox__composer-btn {
   appearance: none;
   border: none;
@@ -1121,3 +1130,50 @@
 .shoutbox--page .shoutbox__item.jt-card .jt-card__foot {
   justify-content: flex-end;
 }
+
+// ── markdown rendering ───────────────────────────────────────────────────────
+.shoutbox__heading {
+  font-weight: bold;
+  color: var(--shoutbox-text);
+  margin-top: 0.3em;
+}
+
+.shoutbox__heading--2 {
+  font-size: var(--font-up-2);
+}
+
+.shoutbox__heading--3 {
+  font-size: var(--font-up-1);
+}
+
+.shoutbox__heading--4 {
+  font-size: var(--font-0);
+  font-weight: bold;
+}
+
+.shoutbox__list-block {
+  padding-left: 0.4em;
+}
+
+.shoutbox__list-item {
+  padding-left: 1em;
+  text-indent: -1em;
+  color: var(--shoutbox-text);
+}
+
+.shoutbox__line {
+  min-height: 0.5em;
+}
+
+.shoutbox__code {
+  font-family: var(--jt-mono, ui-monospace, monospace);
+  background: var(--jt-surface-sunken, var(--primary-very-low));
+  border-radius: var(--jt-radius-sm, 0.3em);
+  padding: 0.05em 0.35em;
+  font-size: var(--font-down-1);
+}
+
+.shoutbox__quote .shoutbox__quote-body .shoutbox__list-block {
+  padding-left: 0.2em;
+}
+
