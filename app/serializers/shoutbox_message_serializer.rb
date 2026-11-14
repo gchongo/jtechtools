@@ -2,7 +2,8 @@
 
 class ShoutboxMessageSerializer < ::ApplicationSerializer
   attributes :id, :message, :color, :created_at, :can_delete, :can_edit,
-             :like_count, :liked, :edited, :pinned
+             :like_count, :liked, :edited, :pinned, :views,
+             :reply_to_id, :reply_count, :reply_to_username
 
   has_one :user, serializer: ::BasicUserSerializer, embed: :objects
 
@@ -26,5 +27,13 @@ class ShoutboxMessageSerializer < ::ApplicationSerializer
 
   def edited
     object.edited_at.present?
+  end
+
+  def reply_count
+    object.replies_count || 0
+  end
+
+  def reply_to_username
+    object.reply_to&.user&.username
   end
 end

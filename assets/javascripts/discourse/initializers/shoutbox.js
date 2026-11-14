@@ -99,7 +99,7 @@ export default apiInitializer("1.8.0", (api) => {
       title: i18n("shoutbox.title"),
       text: i18n("shoutbox.title"),
       href: "/shoutbox",
-      icon: "comment",
+      icon: "compass",
     });
   }
 });

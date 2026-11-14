@@ -2,6 +2,14 @@
 
 class ShoutboxMessage < ActiveRecord::Base
   belongs_to :user
+  belongs_to :reply_to,
+             class_name: "ShoutboxMessage",
+             optional: true,
+             counter_cache: :replies_count
+  has_many :shoutbox_replies,
+           class_name: "ShoutboxMessage",
+           foreign_key: "reply_to_id",
+           dependent: :delete_all
   has_many :shoutbox_likes, dependent: :delete_all
 
   validates :user_id, presence: true

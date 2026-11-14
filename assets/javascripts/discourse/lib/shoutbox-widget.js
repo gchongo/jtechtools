@@ -28,6 +28,7 @@ let loading = false;
 let lastSeenId = 0;
 let pollTimer = null;
 let permalinkHandled = false;
+const viewedInSession = new Set();
 
 const maxId = () => {
   let max = lastSeenId;
@@ -91,12 +92,36 @@ const startShared = () => {
       messageBus.subscribe("/shoutbox", (data) => {
         if (data?.type === "created" && data.message) {
           const m = data.message;
+          if (m.reply_to_id && messages.has(m.reply_to_id)) {
+            const pm = messages.get(m.reply_to_id);
+            if (pm) {
+              pm.reply_count = (pm.reply_count || 0) + 1;
+              widgets.forEach((w) => {
+                const btn = w.els.list.querySelector(
+                  `[data-id="${m.reply_to_id}"] .shoutbox__comment-btn`,
+                );
+                if (!btn) {
+                  return;
+                }
+                let label = btn.querySelector(".shoutbox__action-label");
+                if (!label) {
+                  label = el("span", "shoutbox__action-label");
+                  btn.appendChild(label);
+                }
+                label.textContent = String(pm.reply_count);
+              });
+            }
+          }
           if (messages.has(m.id)) {
             return;
           }
           messages.set(m.id, m);
           lastSeenId = Math.max(lastSeenId, m.id);
-          widgets.forEach((w) => w.appendRow(m, { isNew: true }));
+          if (m.reply_to_id && messages.has(m.reply_to_id)) {
+            widgets.forEach((w) => w.insertReplyRow(m));
+          } else {
+            widgets.forEach((w) => w.appendRow(m, { isNew: true }));
+          }
         } else if (data?.type === "updated" && data.message) {
           const m = data.message;
           if (!messages.has(m.id)) {
@@ -128,8 +153,28 @@ const startShared = () => {
           loaded = false;
           startShared();
         } else if (data?.type === "deleted" && messages.has(data.id)) {
+          const dead = messages.get(data.id);
           messages.delete(data.id);
-          widgets.forEach((w) => w.removeRow(data.id));
+          widgets.forEach((w) => {
+            w.removeRow(data.id);
+            if (dead?.reply_to_id) {
+              const pm = messages.get(dead.reply_to_id);
+              if (pm && pm.reply_count > 0) {
+                pm.reply_count -= 1;
+                const btn = w.els.list.querySelector(
+                  `[data-id="${dead.reply_to_id}"] .shoutbox__comment-btn`,
+                );
+                const label = btn?.querySelector(".shoutbox__action-label");
+                if (label) {
+                  if (pm.reply_count > 0) {
+                    label.textContent = String(pm.reply_count);
+                  } else {
+                    label.remove();
+                  }
+                }
+              }
+            }
+          });
         }
       });
     }
@@ -417,10 +462,26 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
     const cutoff = animateFromId === null ? Infinity : animateFromId;
     widget.els.list.replaceChildren();
     let last = null;
+    const topLevel = [];
+    const repliesByParent = new Map();
     for (const m of messages.values()) {
+      if (m.reply_to_id && messages.has(m.reply_to_id)) {
+        const arr = repliesByParent.get(m.reply_to_id) || [];
+        arr.push(m);
+        repliesByParent.set(m.reply_to_id, arr);
+      } else {
+        topLevel.push(m);
+      }
+    }
+    for (const m of topLevel) {
       const animate = m.id > cutoff;
       widget.els.list.appendChild(buildRow(widget, m, { animate }));
       last = m;
+      for (const r of repliesByParent.get(m.id) || []) {
+        const rAnim = r.id > cutoff;
+        widget.els.list.appendChild(buildRow(widget, r, { animate: rAnim, isReply: true }));
+        last = r;
+      }
     }
     if (last) {
       lastSeenId = Math.max(lastSeenId, last.id);
@@ -460,6 +521,21 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
     }
   };
 
+  widget.insertReplyRow = (m) => {
+    hideEmptyState(widget);
+    const parent = widget.els.list.querySelector(`[data-id="${m.reply_to_id}"]`);
+    const replyRow = buildRow(widget, m, { isReply: true });
+    if (parent) {
+      const replyRows = [
+        ...widget.els.list.querySelectorAll(`[data-reply-to="${m.reply_to_id}"]`),
+      ];
+      (replyRows.length ? replyRows[replyRows.length - 1] : parent).after(replyRow);
+    } else {
+      widget.els.list.appendChild(replyRow);
+    }
+    renderSide(widget);
+  };
+
   widget.showError = () => {
     widget.els.list.replaceChildren(el("li", "shoutbox__msg", i18n("shoutbox.load_failed")));
   };
@@ -487,9 +563,14 @@ export function unmountShoutbox(widget) {
 
 // ── pieces ───────────────────────────────────────────────────────────────────
 
-function buildRow(widget, m, { animate = false } = {}) {
+function buildRow(widget, m, { animate = false, isReply = false } = {}) {
   const li = el("li", "shoutbox__item");
   li.dataset.id = m.id;
+  const replyRow = isReply || !!m.reply_to_id;
+  li.classList.toggle("shoutbox__item--reply", replyRow);
+  if (m.reply_to_id) {
+    li.dataset.replyTo = m.reply_to_id;
+  }
   if (animate) {
     li.classList.add("shoutbox__item--new");
   }
@@ -572,28 +653,22 @@ function buildRow(widget, m, { animate = false } = {}) {
   // memos-style bottom action bar: reply / quote / like
   const actions = el("div", "shoutbox__actions");
 
-  const reply = el("button", "shoutbox__action shoutbox__action--pill");
+  const reply = el("button", "shoutbox__action shoutbox__action--pill shoutbox__comment-btn");
   reply.type = "button";
-  reply.innerHTML = iconHTML("reply");
-  reply.title = i18n("shoutbox.reply", { username: m.user?.username || "" });
-  reply.setAttribute("aria-label", i18n("shoutbox.reply", { username: m.user?.username || "" }));
-  reply.addEventListener("click", () => {
-    // on the panel the composer lives inside the ＋ popup — open it first
-    if (widget.els.plusBtn) {
-      widget.els.composePop.hidden = false;
-    }
-    const ta = widget.els.composer;
-    if (ta) {
-      insertAtCursor(ta, `@${m.user?.username} `);
-    }
-  });
+  reply.innerHTML = iconHTML("far-comment");
+  if (m.reply_count > 0) {
+    reply.appendChild(el("span", "shoutbox__action-label", String(m.reply_count)));
+  }
+  reply.title = i18n("shoutbox.comment");
+  reply.setAttribute("aria-label", i18n("shoutbox.comment"));
+  reply.addEventListener("click", () => toggleCommentBox(widget, m, li));
   actions.appendChild(reply);
 
   const quote = el("button", "shoutbox__action shoutbox__action--pill");
   quote.type = "button";
-  quote.innerHTML = iconHTML("quote-right");
-  quote.title = i18n("shoutbox.quote");
-  quote.setAttribute("aria-label", i18n("shoutbox.quote"));
+  quote.innerHTML = iconHTML("repeat");
+  quote.title = i18n("shoutbox.repost");
+  quote.setAttribute("aria-label", i18n("shoutbox.repost"));
   quote.addEventListener("click", () => {
     if (widget.els.plusBtn) {
       widget.els.composePop.hidden = false;
@@ -614,14 +689,132 @@ function buildRow(widget, m, { animate = false } = {}) {
   likeBtn.addEventListener("click", () => toggleLike(widget, m, likeBtn));
   actions.appendChild(likeBtn);
 
+  const views = el("span", "shoutbox__action shoutbox__action--views");
+  views.title = i18n("shoutbox.views", { n: m.views || 0 });
+  views.innerHTML =
+    iconHTML("far-eye") +
+    '<span class="shoutbox__action-label">' + (m.views || 0) + "</span>";
+  actions.appendChild(views);
+
+  const share = el("button", "shoutbox__action shoutbox__action--pill");
+  share.type = "button";
+  share.innerHTML = iconHTML("share");
+  share.title = i18n("shoutbox.share");
+  share.setAttribute("aria-label", i18n("shoutbox.share"));
+  share.addEventListener("click", () => copyMessageLink(m));
+  actions.appendChild(share);
+
   li.appendChild(actions);
+
+  // memos-style impression counting: one POST per message per session when
+  // the row first scrolls into view
+  if (!viewedInSession.has(m.id)) {
+    seenObserver.observe(li);
+  }
+
+  return li;
 
   return li;
 }
 
+// memos-style inline comment box under a message row: submit posts the
+// message as a reply (reply_to_id), rendered indented under its parent.
+function toggleCommentBox(widget, m, row) {
+  const existing = row.querySelector(
+    `:scope > .shoutbox__comment-box[data-parent="${m.id}"]`,
+  );
+  widget.els.list.querySelectorAll(".shoutbox__comment-box").forEach((b) => {
+    if (b !== existing) {
+      b.remove();
+    }
+  });
+  if (existing) {
+    existing.remove();
+    return;
+  }
+
+  const box = el("div", "shoutbox__comment-box");
+  box.dataset.parent = m.id;
+
+  const ta = el("textarea", "shoutbox__comment-input");
+  ta.rows = 1;
+  ta.maxLength = viewer?.max_length || 200;
+  ta.placeholder = i18n("shoutbox.comment_placeholder");
+  box.appendChild(ta);
+
+  const bar = el("div", "shoutbox__comment-bar");
+  const count = el("span", "shoutbox__count");
+  const actions = el("div", "shoutbox__composer-actions");
+
+  const cancel = el("button", "shoutbox__comment-cancel");
+  cancel.type = "button";
+  cancel.textContent = i18n("shoutbox.cancel");
+  cancel.addEventListener("click", () => box.remove());
+  actions.appendChild(cancel);
+
+  const publish = el("button", "shoutbox__send");
+  publish.type = "button";
+  publish.textContent = i18n("shoutbox.publish");
+  publish.disabled = true;
+  actions.appendChild(publish);
+  bar.appendChild(count);
+  bar.appendChild(actions);
+  box.appendChild(bar);
+  row.appendChild(box);
+  ta.focus();
+
+  const update = () => {
+    count.textContent = i18n("shoutbox.count", {
+      current: ta.value.length,
+      max: ta.maxLength,
+    });
+    publish.disabled = ta.value.trim().length === 0;
+  };
+  update();
+  ta.addEventListener("input", update);
+
+  publish.addEventListener("click", () => {
+    const text = ta.value.trim();
+    if (!text || publish.disabled) {
+      return;
+    }
+    publish.disabled = true;
+    publish.textContent = i18n("shoutbox.posting");
+    ajax("/shoutbox/messages.json", {
+      type: "POST",
+      data: { message: text, reply_to_id: m.id },
+    })
+      .then((payload) => {
+        box.remove();
+        if (payload?.message && !messages.has(payload.message.id)) {
+          const mr = payload.message;
+          messages.set(mr.id, mr);
+          lastSeenId = Math.max(lastSeenId, mr.id);
+          widgets.forEach((w) => w.insertReplyRow(mr));
+        }
+      })
+      .catch((err) => {
+        publish.disabled = false;
+        publish.textContent = i18n("shoutbox.publish");
+        window.alert(err?.jqXHR?.responseJSON?.errors?.[0] || i18n("shoutbox.send_failed"));
+      });
+  });
+
+  ta.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey || !event.shiftKey)) {
+      event.preventDefault();
+      if (!publish.disabled) {
+        publish.click();
+      }
+    } else if (event.key === "Escape") {
+      box.remove();
+    }
+  });
+}
+
 function renderLikeBtn(btn, m) {
   btn.innerHTML =
-    iconHTML("heart") +
+    iconHTML("far-heart") +
     (m.like_count > 0 ? '<span class="shoutbox__action-label">' + m.like_count + "</span>" : "");
   btn.classList.toggle("is-liked", !!m.liked);
 }
@@ -709,7 +902,6 @@ function openRowMenu(widget, m, container) {
     menu.appendChild(b);
   };
 
-  add(i18n("shoutbox.copy_link"), "", () => copyMessageLink(m));
   if (m.can_edit) {
     add(i18n("shoutbox.edit"), "", () => startEdit(widget, m));
   }
@@ -733,6 +925,40 @@ function openRowMenu(widget, m, container) {
   };
   setTimeout(() => document.addEventListener("click", close), 0);
 }
+
+// Fires the view POST when a message row first scrolls into view.
+const seenObserver = new IntersectionObserver(
+  (entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) {
+        return;
+      }
+      seenObserver.unobserve(entry.target);
+      const id = Number(entry.target.dataset.id);
+      if (!id || viewedInSession.has(id)) {
+        return;
+      }
+      viewedInSession.add(id);
+      ajax(`/shoutbox/messages/${id}/view`, { type: "POST" })
+        .then((payload) => {
+          const m = messages.get(id);
+          if (m && payload?.views != null) {
+            m.views = payload.views;
+            widgets.forEach((w) => {
+              const elv = w.els.list.querySelector(
+                `[data-id="${id}"] .shoutbox__action--views .shoutbox__action-label`,
+              );
+              if (elv) {
+                elv.textContent = payload.views;
+              }
+            });
+          }
+        })
+        .catch(() => {});
+    });
+  },
+  { threshold: 0.5 },
+);
 
 function scrollToBottom(widget, force = false) {
   const list = widget.els.list;
@@ -849,42 +1075,54 @@ function renderFoot(widget) {
 }
 
 function buildComposerInto(widget, host) {
+  // memos-style composer: avatar + borderless editor, then a hairline bar
+  // with the icon strip on the left and the publish pill on the right.
   const row = el("div", "shoutbox__composer-row");
 
-  // X-style page composer leads with the current user's avatar
-  if (widget.variant === "page" && viewer?.avatar_template) {
+  if (viewer?.avatar_template) {
     const av = el("img", "shoutbox__composer-avatar");
     av.src = viewer.avatar_template.replace("{size}", "96");
     av.alt = "";
     row.appendChild(av);
   }
 
-  const emojiBtn = el("button", "shoutbox__composer-btn shoutbox__emoji-btn");
-  emojiBtn.type = "button";
-  emojiBtn.title = i18n("shoutbox.emoji_picker");
-  emojiBtn.setAttribute("aria-label", i18n("shoutbox.emoji_picker"));
-  emojiBtn.innerHTML = iconHTML("face-smile");
-  row.appendChild(emojiBtn);
+  const col = el("div", "shoutbox__composer-col");
 
   const ta = el("textarea", "shoutbox__composer");
   ta.rows = 1;
   ta.maxLength = viewer?.max_length || 200;
   ta.placeholder = i18n("shoutbox.placeholder");
   widget.els.composer = ta;
-  row.appendChild(ta);
+  col.appendChild(ta);
 
-  const send = el("button", "shoutbox__composer-btn shoutbox__send");
+  const bar = el("div", "shoutbox__composer-bar");
+  const icons = el("div", "shoutbox__composer-icons");
+
+  const emojiBtn = el("button", "shoutbox__composer-btn shoutbox__emoji-btn");
+  emojiBtn.type = "button";
+  emojiBtn.title = i18n("shoutbox.emoji_picker");
+  emojiBtn.setAttribute("aria-label", i18n("shoutbox.emoji_picker"));
+  emojiBtn.innerHTML = iconHTML("face-smile");
+  icons.appendChild(emojiBtn);
+
+  const count = el("span", "shoutbox__count");
+  icons.appendChild(count);
+
+  bar.appendChild(icons);
+
+  const actions = el("div", "shoutbox__composer-actions");
+  const send = el("button", "shoutbox__send");
   send.type = "button";
-  send.title = i18n("shoutbox.publish");
-  send.setAttribute("aria-label", i18n("shoutbox.publish"));
-  send.innerHTML = iconHTML("paper-plane");
+  send.textContent = i18n("shoutbox.publish");
+  send.disabled = true; // memos-style: grey pill until there is text
   widget.els.sendBtn = send;
-  row.appendChild(send);
+  actions.appendChild(send);
+  bar.appendChild(actions);
 
+  col.appendChild(bar);
+  row.appendChild(col);
   host.appendChild(row);
 
-  const meta = el("div", "shoutbox__composer-meta");
-  const count = el("span", "shoutbox__count");
   const updateCount = () => {
     // NB: don't name the option "count" — that makes Discourse's i18n look
     // for pluralized key variants (shoutbox.count.one/other).
@@ -892,11 +1130,10 @@ function buildComposerInto(widget, host) {
       current: ta.value.length,
       max: ta.maxLength,
     });
+    send.disabled = ta.value.trim().length === 0;
   };
   updateCount();
   ta.addEventListener("input", updateCount);
-  meta.appendChild(count);
-  host.appendChild(meta);
 
   const emojiPop = widget.rootEl.querySelector(".shoutbox__emoji-pop");
   emojiBtn.addEventListener("click", () => {
@@ -1045,7 +1282,7 @@ function buildComposerInto(widget, host) {
   chipCancel.title = i18n("shoutbox.cancel");
   chipCancel.addEventListener("click", () => cancelEdit(widget));
   chip.appendChild(chipCancel);
-  host.appendChild(chip);
+  host.insertBefore(chip, row);
   widget.els.editingChip = chip;
 
   send.addEventListener("click", () => submit(widget));
@@ -1090,8 +1327,8 @@ function submit(widget) {
       window.alert(msg);
     })
     .finally(() => {
-      send.disabled = false;
-      send.innerHTML = iconHTML("paper-plane");
+      send.textContent = i18n("shoutbox.publish");
+      send.disabled = ta.value.trim().length === 0;
       ta.focus();
     });
 }

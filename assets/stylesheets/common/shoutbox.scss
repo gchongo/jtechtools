@@ -256,26 +256,45 @@
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 0.5em;
+  justify-content: space-between;
+  gap: 0.25em;
   margin-top: 0.4em;
+  max-width: 425px;
 }
 
 .shoutbox__action {
   appearance: none;
   border: none;
   background: transparent;
-  color: var(--primary-low-mid);
+  color: var(--shoutbox-muted);
   cursor: pointer;
-  padding: 0 0.25em;
-  font-size: var(--font-down-2);
-  line-height: 1.2;
+  border-radius: var(--shoutbox-radius-pill);
+  padding: 0.45em;
+  min-width: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3em;
+  font-size: var(--font-0);
+  line-height: 1;
+  transition: background 0.15s ease, color 0.15s ease;
 
-  &:hover {
+  .d-icon {
+    width: 1.1em;
+    height: 1.1em;
+  }
+
+  &:hover:not(.shoutbox__action--views) {
+    background: var(--jt-accent-soft, var(--shoutbox-hover));
     color: var(--shoutbox-accent);
   }
 
-  &--delete:hover {
-    color: var(--danger);
+  &--views {
+    cursor: default;
+
+    .shoutbox__action-label {
+      font-size: var(--font-down-1);
+    }
   }
 
   &:disabled {
@@ -284,56 +303,96 @@
   }
 }
 
-// ── composer ─────────────────────────────────────────────────────────────────
+// ── composer (memos-style) ───────────────────────────────────────────────────
 .shoutbox__foot {
   border-top: 1px solid var(--shoutbox-border);
   padding: 0.5em 0.6em;
-  background: var(--secondary);
+  background: var(--shoutbox-surface);
 }
 
 .shoutbox__composer-row {
   display: flex;
-  align-items: flex-end;
-  gap: 0.4em;
+  align-items: flex-start;
+  gap: 0.75em;
   position: relative;
+}
+
+.shoutbox__composer-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--shoutbox-radius-avatar);
+  border: 1px solid var(--shoutbox-border);
+  object-fit: cover;
+  flex-shrink: 0;
+  margin-top: 0.2em;
+}
+
+.shoutbox__composer-col {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .shoutbox__composer {
   flex: 1 1 auto;
   resize: none;
-  min-height: 2.2em;
-  max-height: 6em;
-  padding: 0.5em 0.65em;
-  border: 1px solid var(--primary-medium);
-  border-radius: 0.5em;
-  background: var(--primary-very-low);
-  color: var(--primary);
+  min-height: 2.6em;
+  max-height: 50vh;
+  padding: 0.35em 0;
+  border: none;
+  background: transparent;
+  color: var(--shoutbox-text);
   font-size: var(--font-0);
+  line-height: var(--line-height-medium);
+
+  &::placeholder {
+    color: var(--shoutbox-muted);
+  }
 
   &:focus {
     outline: none;
-    border-color: var(--tertiary);
   }
+}
+
+.shoutbox__composer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5em;
+  border-top: 1px solid var(--shoutbox-border);
+  margin-top: 0.6em;
+  padding-top: 0.45em;
+}
+
+.shoutbox__composer-icons {
+  display: flex;
+  align-items: center;
+  gap: 0.1em;
+  min-width: 0;
 }
 
 .shoutbox__composer-btn {
   appearance: none;
   border: none;
   background: transparent;
-  color: var(--primary-medium);
+  color: var(--shoutbox-accent);
   cursor: pointer;
-  padding: 0.35em 0.45em;
-  border-radius: 0.4em;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  font-size: var(--font-up-1);
+  transition: background 0.15s ease;
 
   &:hover {
-    color: var(--tertiary);
-    background: var(--primary-very-low);
+    background: var(--shoutbox-hover);
   }
 
   &:disabled {
-    opacity: 0.5;
+    opacity: 0.4;
     cursor: default;
   }
 
@@ -343,25 +402,40 @@
   }
 }
 
-.shoutbox__send {
-  color: var(--shoutbox-on-accent);
-  background: var(--shoutbox-accent);
-
-  &:hover {
-    color: var(--shoutbox-on-accent);
-    background: var(--tertiary-hover, var(--shoutbox-accent));
-  }
+.shoutbox__composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  flex-shrink: 0;
 }
 
-.shoutbox__composer-meta {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 0.2em;
+.shoutbox__send {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  border-radius: var(--shoutbox-radius-pill);
+  padding: 0.3em 1.1em;
+  font-size: var(--font-0);
+  font-weight: bold;
+  color: var(--shoutbox-on-accent);
+  background: var(--shoutbox-accent);
+  transition: background 0.15s ease, color 0.15s ease;
+
+  &:hover:not(:disabled) {
+    background: var(--tertiary-hover, var(--shoutbox-accent));
+    color: var(--shoutbox-on-accent);
+  }
+
+  &:disabled {
+    cursor: default;
+    background: var(--jt-border-strong, var(--primary-low-mid));
+    color: var(--shoutbox-muted);
+  }
 }
 
 .shoutbox__count {
   font-size: var(--font-down-2);
-  color: var(--primary-medium);
+  color: var(--shoutbox-muted);
 }
 
 // Panel variant: the composer lives in the ＋ popup, the foot is never used.
@@ -629,52 +703,11 @@
   font-size: var(--font-up-2);
 }
 
-// Composer on top, X-style: avatar, borderless input, circular send.
+// Composer on top, memos-style: avatar, borderless input, hairline bar.
 .shoutbox--page .shoutbox__foot {
   border-top: none;
   border-bottom: 1px solid var(--shoutbox-border);
   padding: 0.75em 1em 0.5em;
-}
-
-.shoutbox--page .shoutbox__composer-row {
-  align-items: flex-start;
-}
-
-.shoutbox__composer-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  margin-right: 0.75em;
-}
-
-.shoutbox--page .shoutbox__composer {
-  border: none;
-  background: transparent;
-  font-size: var(--font-up-2);
-  padding: 0.3em 0;
-  min-height: 3.5em;
-  max-height: 12em;
-}
-
-.shoutbox--page .shoutbox__composer-meta {
-  padding-top: 0.3em;
-}
-
-.shoutbox--page .shoutbox__send {
-  border-radius: 50%;
-  width: 2.4em;
-  height: 2.4em;
-  padding: 0;
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  .d-icon {
-    width: 1.1em;
-    height: 1.1em;
-  }
 }
 
 // Popovers drop downward from the composer on the page variant.
@@ -682,6 +715,87 @@
 .shoutbox--page .shoutbox__mention-pop {
   bottom: auto;
   top: 0.4em;
+}
+
+// ── replies (comments) ───────────────────────────────────────────────────────
+// Replies render indented under their parent, with a smaller avatar.
+.shoutbox__item--reply {
+  padding-left: calc(1em + 32px + 0.85em);
+}
+
+.shoutbox--page .shoutbox__item--reply {
+  grid-template-columns: 24px 1fr;
+  padding-left: calc(1em + 32px + 0.85em);
+}
+
+.shoutbox__item--reply .shoutbox__avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+
+.shoutbox__item--reply .shoutbox__text {
+  -webkit-line-clamp: unset;
+  display: block;
+  overflow: visible;
+}
+
+// memos-style inline comment box under the row being commented on
+.shoutbox__comment-box {
+  display: flex;
+  flex-direction: column;
+  flex-basis: 100%;
+  margin-top: 0.4em;
+  background: var(--jt-surface-sunken, var(--primary-very-low));
+  border-radius: var(--jt-radius-sm, 0.4em);
+  padding: 0.6em;
+}
+
+.shoutbox--page .shoutbox__comment-box {
+  grid-column: 2;
+}
+
+.shoutbox__comment-input {
+  resize: none;
+  min-height: 2.4em;
+  max-height: 10em;
+  padding: 0.35em 0;
+  border: none;
+  background: transparent;
+  color: var(--shoutbox-text);
+  font-size: var(--font-0);
+
+  &::placeholder {
+    color: var(--shoutbox-muted);
+  }
+
+  &:focus {
+    outline: none;
+  }
+}
+
+.shoutbox__comment-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5em;
+  border-top: 1px solid var(--shoutbox-border);
+  margin-top: 0.4em;
+  padding-top: 0.4em;
+}
+
+.shoutbox__comment-cancel {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--shoutbox-muted);
+  cursor: pointer;
+  font-size: var(--font-0);
+  padding: 0.3em 0.8em;
+
+  &:hover {
+    color: var(--shoutbox-text);
+  }
 }
 
 // Timeline rows: hairline separated, hover highlight, actions under content.
@@ -732,7 +846,6 @@
 
 .shoutbox--page .shoutbox__actions {
   grid-column: 2;
-  gap: 1em;
   margin-top: 0.5em;
 }
 

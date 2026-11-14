@@ -26,12 +26,18 @@ module DiscourseShoutbox
             SiteSetting.shoutbox_messages_displayed,
           )
         else
-          ShoutboxMessage.where(pinned: true).recent.limit(
-            SiteSetting.shoutbox_messages_displayed,
-          ).reverse +
-            ShoutboxMessage.where(pinned: false).recent.limit(
-              SiteSetting.shoutbox_messages_displayed,
-            ).reverse
+          top =
+            (
+              ShoutboxMessage.where(pinned: true).recent.limit(
+                SiteSetting.shoutbox_messages_displayed,
+              ).reverse +
+                ShoutboxMessage.where(pinned: false).recent.limit(
+                  SiteSetting.shoutbox_messages_displayed,
+                ).reverse
+            ).select { |m| m.reply_to_id.nil? }
+          replies =
+            top.empty? ? [] : ShoutboxMessage.where(reply_to_id: top.map(&:id)).order(:id).to_a
+          (top + replies).sort_by(&:id)
         end
 
       render json: {
@@ -124,6 +130,16 @@ module DiscourseShoutbox
         { type: "pinned", id: message.id, pinned: message.pinned },
       )
       render json: success_json.merge(pinned: message.pinned)
+    end
+
+    # Fire-and-forget impression counter: the client posts it once per
+    # message per session when the row first scrolls into view.
+    def view
+      message = ShoutboxMessage.find_by(id: params[:id])
+      raise Discourse::NotFound unless message
+
+      message.increment!(:views)
+      render json: success_json.merge(views: message.views)
     end
 
     def destroy
