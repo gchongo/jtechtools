@@ -40,9 +40,14 @@ const clipWords = (text, max = 700) => {
   return (cut > 0 ? t.slice(0, cut) : t.slice(0, max)).trimEnd();
 };
 
-// core's cached excerpt is usable only when it is complete
+// core's cached excerpt is usable only when it is complete. Truncated
+// excerpts end with "…" — but core also appends a "read more" anchor after
+// it, which the old …$ regex missed, leaving the label stuck in the card.
 const excerptTruncated = (topic) =>
-  !topic.excerpt || /(&hellip;|…)\s*$/.test(topic.excerpt);
+  !topic.excerpt ||
+  topic.excerptTruncated === true ||
+  /(&hellip;|…)/.test(topic.excerpt) ||
+  /read\s*more/i.test(topic.excerpt);
 
 // d-icon names map onto the jtech sprite through the theme's icon map
 const ICON_SPRITE = {
@@ -192,8 +197,26 @@ export default apiInitializer((api) => {
             ? desiredExcerpt
             : stripHtml(topic.excerpt)
         ).length;
-        if (existingCard && (existingExcerpt?.length ?? -1) >= desiredLen) {
+        // "up to date" requires excerpt AND a non-empty title: a card built
+        // from an Ember half-render (empty stolen nodes) stays stuck forever
+        // otherwise, since the row holds no core content to re-steal.
+        const existingTitle = existingCard
+          ?.querySelector(".jt-card__title")
+          ?.textContent.trim();
+        if (
+          existingCard &&
+          (existingExcerpt?.length ?? -1) >= desiredLen &&
+          existingTitle
+        ) {
           return; // up to date
+        }
+        if (
+          titleNodes.length === 0 &&
+          !topic.fancy_title &&
+          !topic.title &&
+          !topic._titleNodes?.length
+        ) {
+          return; // no title source yet — keep the core row, retry later
         }
         // stash for the next rebuild
         if (category) {
@@ -240,6 +263,18 @@ export default apiInitializer((api) => {
         title.setAttribute("role", "heading");
         title.setAttribute("aria-level", "2");
         titleNodes.forEach((child) => title.appendChild(child));
+        if (title.children.length === 0 && (topic.fancy_title || topic.title)) {
+          const link = document.createElement("a");
+          link.className = "title raw-link raw-topic-link";
+          link.dataset.topicId = topic.id;
+          link.href = `/t/${topic.slug}/${topic.id}`;
+          if (topic.fancy_title) {
+            link.innerHTML = topic.fancy_title; // core's escaped HTML
+          } else {
+            link.textContent = topic.title;
+          }
+          title.appendChild(link);
+        }
         text.appendChild(title);
         const excerpt = desiredExcerpt;
         if (excerpt) {
@@ -254,6 +289,21 @@ export default apiInitializer((api) => {
           }
           link.appendChild(span);
           text.appendChild(link);
+          // memos-style more/less: measured after the row is in the DOM —
+          // the button only shows when the two-line clamp actually overflows
+          const more = document.createElement("button");
+          more.type = "button";
+          more.className = "jt-card__more";
+          more.hidden = true;
+          more.textContent = i18n("jt.more");
+          more.addEventListener("click", (event) => {
+            // keep the row's click-to-open from firing
+            event.preventDefault();
+            event.stopPropagation();
+            const expanded = link.classList.toggle("is-expanded");
+            more.textContent = i18n(expanded ? "jt.less" : "jt.more");
+          });
+          text.appendChild(more);
         }
         body.appendChild(text);
         card.appendChild(body);
@@ -346,6 +396,16 @@ export default apiInitializer((api) => {
         card.appendChild(foot);
 
         row.replaceChildren(card);
+
+        // reveal the more toggle only when the clamp overflows
+        requestAnimationFrame(() => {
+          const exc = card.querySelector(".topic-excerpt");
+          const m = card.querySelector(".jt-card__more");
+          if (!exc || !m || exc.classList.contains("is-expanded")) {
+            return;
+          }
+          m.hidden = exc.scrollHeight <= exc.clientHeight + 2;
+        });
 
         // core's excerpt is missing or cut short — pull the first post and
         // clip a longer, word-boundary-safe excerpt from it
