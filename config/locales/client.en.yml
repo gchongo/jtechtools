@@ -27,6 +27,8 @@ en:
       image: "Image"
       uploading: "Uploading…"
       upload_failed: "Image upload failed"
+      attachments: "Attachments"
+      attach_remove: "Remove"
       emoji_picker: "Emoji"
       show_more: "Show more"
       show_less: "Show less"

@@ -411,6 +411,71 @@ function imageSrcFor(raw) {
   return null;
 }
 
+// image markdown, global form — the composer counter, edit parsing and
+// submit assembly all strip/extract with this same pattern
+const IMAGE_MD_RE_G = /!\[[^\]\n]*\]\([^)\s]+(?:\s[^)]*)?\)/g;
+
+const fmtBytes = (n) => {
+  if (n >= 1024 * 1024) {
+    return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${(n / 1024).toFixed(1)} KB`;
+};
+
+// X-style pending-image previews: a grid of large rounded tiles under the
+// textarea (text above, images below), each with a floating ✕ remove button
+function renderAttachments(widget) {
+  const wrap = widget.els.attWrap;
+  const list = widget.els.pending || [];
+  if (!wrap) {
+    return;
+  }
+  wrap.replaceChildren();
+  if (list.length === 0) {
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+  wrap.dataset.count = String(list.length);
+
+  list.forEach((item) => {
+    const cell = el("div", "shoutbox__att-preview");
+    cell.title = item.status === "done" ? `${item.name}${item.meta ? ` — ${item.meta}` : ""}` : "";
+
+    if (item.status === "done" && item.short_url) {
+      const img = el("img", "shoutbox__att-img");
+      img.src = imageSrcFor(item.short_url);
+      img.alt = item.name;
+      cell.appendChild(img);
+    } else {
+      const ph = el("span", "shoutbox__att-ph");
+      ph.textContent = item.status === "failed" ? i18n("shoutbox.upload_failed") : "···";
+      if (item.status === "failed") {
+        ph.classList.add("shoutbox__att-ph--error");
+      }
+      cell.appendChild(ph);
+    }
+
+    const remove = el("button", "shoutbox__att-remove");
+    remove.type = "button";
+    remove.title = i18n("shoutbox.attach_remove");
+    remove.setAttribute("aria-label", i18n("shoutbox.attach_remove"));
+    remove.innerHTML = iconHTML("xmark");
+    remove.addEventListener("click", () => {
+      widget.els.pending = widget.els.pending.filter((p) => p !== item);
+      renderAttachments(widget);
+      if (widget.els.sendBtn && widget.els.composer) {
+        widget.els.sendBtn.disabled =
+          widget.els.composer.value.replace(IMAGE_MD_RE_G, "").trim().length === 0 &&
+          !widget.els.pending.some((p) => p.status === "done");
+      }
+    });
+    cell.appendChild(remove);
+
+    wrap.appendChild(cell);
+  });
+}
+
 // Line-level markdown: headings (# ## ###), bullet lists (- ), paragraphs.
 function renderLines(parent, text) {
   const lines = text.split("\n");
@@ -899,7 +964,17 @@ function startEdit(widget, m) {
   if (!ta) {
     return;
   }
-  ta.value = m.message;
+  // existing images move out of the raw text and back into the attachments
+  // strip, so they render as previews and can be removed like new ones
+  const images = [...m.message.matchAll(/!\[([^\]\n]*)\]\(([^)\s]+)[^)]*\)/g)];
+  widget.els.pending = images.map((g, i) => ({
+    id: `edit-${g[1] || i}`,
+    name: g[1] || "image",
+    status: "done",
+    short_url: g[2],
+  }));
+  renderAttachments(widget);
+  ta.value = m.message.replace(IMAGE_MD_RE_G, "").replace(/\n{3,}/g, "\n\n").trim();
   ta.dispatchEvent(new Event("input"));
   ta.focus();
 }
@@ -907,6 +982,8 @@ function startEdit(widget, m) {
 function cancelEdit(widget) {
   editing = null;
   widgets.forEach((w) => w.setEditingChip?.(false));
+  widget.els.pending = [];
+  renderAttachments(widget);
   const ta = widget.els.composer;
   if (ta) {
     ta.value = "";
@@ -1385,6 +1462,7 @@ function renderFoot(widget) {
   const fileInput = el("input", "shoutbox__file-input");
   fileInput.type = "file";
   fileInput.accept = "image/*";
+  fileInput.multiple = true;
   fileInput.hidden = true;
   icons.appendChild(fileInput);
 
@@ -1392,38 +1470,57 @@ function renderFoot(widget) {
   icons.appendChild(imageBtn);
 
   fileInput.addEventListener("change", () => {
-    const file = fileInput.files && fileInput.files[0];
+    const files = [...(fileInput.files || [])];
     fileInput.value = "";
-    if (!file) {
+    if (files.length === 0 || imageBtn.disabled) {
       return;
     }
-    if (imageBtn.disabled) {
-      return;
-    }
+    // X-style: uploads become large previews under the textarea (text stays
+    // above), up to 4 per message; markdown is assembled at submit time
     imageBtn.disabled = true;
     imageBtn.classList.add("is-busy");
-    count.textContent = i18n("shoutbox.uploading");
-    const fd = new FormData();
-    fd.append("file", file, file.name);
-    ajax("/shoutbox/uploads.json", {
-      type: "POST",
-      data: fd,
-      processData: false,
-      contentType: false,
-    })
-      .then((data) => {
-        const alt = file.name.replace(/\.[^.]+$/, "").slice(0, 60) || "image";
-        insertAtCursor(ta, `\n![${alt}](${data.short_url || data.url})\n`);
-        ta.dispatchEvent(new Event("input", { bubbles: true }));
+    const room = 4 - widget.els.pending.filter((p) => p.status !== "failed").length;
+    const batch = files.slice(0, Math.max(0, room));
+    if (batch.length === 0) {
+      imageBtn.disabled = false;
+      imageBtn.classList.remove("is-busy");
+      return;
+    }
+    let settled = 0;
+    batch.forEach((file) => {
+      const item = {
+        id: `up-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name: file.name,
+        meta: `${(file.type.split("/")[1] || "image").toUpperCase()} · ${fmtBytes(file.size)}`,
+        status: "uploading",
+      };
+      widget.els.pending.push(item);
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+      ajax("/shoutbox/uploads.json", {
+        type: "POST",
+        data: fd,
+        processData: false,
+        contentType: false,
       })
-      .catch(() => {
-        count.textContent = i18n("shoutbox.upload_failed");
-        setTimeout(updateCount, 2500);
-      })
-      .finally(() => {
-        imageBtn.disabled = false;
-        imageBtn.classList.remove("is-busy");
-      });
+        .then((data) => {
+          item.short_url = data.short_url || data.url;
+          item.status = "done";
+        })
+        .catch(() => {
+          item.status = "failed";
+        })
+        .finally(() => {
+          settled++;
+          if (settled === batch.length) {
+            imageBtn.disabled = false;
+            imageBtn.classList.remove("is-busy");
+          }
+          updateCount();
+          renderAttachments(widget);
+        });
+    });
+    renderAttachments(widget);
   });
 
   const emojiBtn = el("button", "shoutbox__composer-btn shoutbox__emoji-btn");
@@ -1442,18 +1539,29 @@ function renderFoot(widget) {
   widget.els.composer = ta;
   col.appendChild(ta);
 
+  // memos-style attachments strip between the textarea and the tool bar;
+  // pending survives composer rebuilds (capability-gated)
+  widget.els.pending = widget.els.pending || [];
+  const attWrap = el("div", "shoutbox__attachments");
+  attWrap.hidden = true;
+  widget.els.attWrap = attWrap;
+  col.appendChild(attWrap);
+
   const actions = el("div", "shoutbox__composer-actions");
   const count = el("span", "shoutbox__count");
   const updateCount = () => {
     // NB: don't name the option "count" — that makes Discourse's i18n look
     // for pluralized key variants (shoutbox.count.one/other). Image markdown
-    // doesn't count toward the limit (the server strips it the same way).
-    const visible = ta.value.replace(/!\[[^\]\n]*\]\([^)\s]+(?:\s[^)]*)?\)/g, "");
+    // doesn't count toward the limit (the server strips it the same way) and
+    // pending attachments make Post available with an otherwise-empty text.
+    const visible = ta.value.replace(IMAGE_MD_RE_G, "");
     count.textContent = i18n("shoutbox.count", {
       current: visible.length,
       max: ta.maxLength,
     });
-    send.disabled = visible.trim().length === 0;
+    send.disabled =
+      visible.trim().length === 0 &&
+      !widget.els.pending.some((p) => p.status === "done");
   };
   actions.appendChild(count);
 
@@ -1615,7 +1723,12 @@ function renderFoot(widget) {
 function submit(widget) {
   const ta = widget.els.composer;
   const send = widget.els.sendBtn;
-  const text = ta.value.trim();
+  // attachments (memos-style) join the message as image markdown lines
+  const attachMd = (widget.els.pending || [])
+    .filter((p) => p.status === "done" && p.short_url)
+    .map((p) => `\n![${p.name.replace(/\.[^.]+$/, "").slice(0, 60) || "image"}](${p.short_url})`)
+    .join("");
+  const text = (ta.value.trim() + attachMd).trim();
   if (!text || send.disabled) {
     return;
   }
@@ -1630,6 +1743,8 @@ function submit(widget) {
   req.then((payload) => {
       ta.value = "";
       ta.dispatchEvent(new Event("input"));
+      widget.els.pending = [];
+      renderAttachments(widget);
       editing = null;
       widgets.forEach((w) => w.setEditingChip?.(false));
       if (payload?.message) {
@@ -1652,7 +1767,10 @@ function submit(widget) {
     })
     .finally(() => {
       send.textContent = i18n("shoutbox.publish");
-      send.disabled = ta.value.trim().length === 0;
+      const visible = ta.value.replace(IMAGE_MD_RE_G, "");
+      send.disabled =
+        visible.trim().length === 0 &&
+        !(widget.els.pending || []).some((p) => p.status === "done");
       ta.focus();
     });
 }

@@ -1335,6 +1335,96 @@
   pointer-events: none;
 }
 
+// X-style pending image previews: text area above, image tiles below.
+// One image = full-width tile (capped height); several = a 2-column grid
+// of square tiles, like the composer on X.
+.shoutbox__attachments {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5em;
+  margin: 0.25em 0 0.5em;
+  padding: 0;
+  background: none;
+  border: none;
+
+  &[data-count="1"] {
+    grid-template-columns: 1fr;
+  }
+}
+
+.shoutbox__att-preview {
+  position: relative;
+  border-radius: 0.9em;
+  overflow: hidden;
+  background: var(--jt-surface-sunken, var(--primary-very-low));
+
+  [data-count="1"] & {
+    max-height: 22em;
+  }
+
+  [data-count]:not([data-count="1"]) & {
+    aspect-ratio: 1 / 1;
+  }
+}
+
+.shoutbox__att-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: inherit;
+  object-fit: cover;
+
+  [data-count]:not([data-count="1"]) & {
+    height: 100%;
+  }
+}
+
+.shoutbox__att-ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 8em;
+  height: 100%;
+  color: var(--shoutbox-muted);
+  font-size: 1.4em;
+  letter-spacing: 0.1em;
+
+  &--error {
+    font-size: var(--font-down-2);
+    letter-spacing: normal;
+    color: var(--danger, #d04544);
+    text-align: center;
+    padding: 0 1em;
+  }
+}
+
+.shoutbox__att-remove {
+  position: absolute;
+  top: 0.5em;
+  right: 0.5em;
+  appearance: none;
+  border: none;
+  width: 1.9em;
+  height: 1.9em;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+
+  svg {
+    width: 0.8em;
+    height: 0.8em;
+  }
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.85);
+  }
+}
+
 // message images: memos-style rounded block, capped height, click to open
 .shoutbox__image-link {
   display: inline-block;
