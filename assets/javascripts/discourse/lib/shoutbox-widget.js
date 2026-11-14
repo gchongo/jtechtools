@@ -4,8 +4,8 @@
 // no innerHTML with message data, so the board is XSS-safe by construction.
 //
 // Data flows through one shared store: the first mount pulls the recent list,
-// MessageBus "/shoutbox" pushes live creates/deletes to every mounted widget,
-// and a 60s catch-up poll guards against a dropped bus message.
+// MessageBus "/shoutbox" pushes live creates/deletes/likes/edits/pins to every
+// mounted widget, and a 60s catch-up poll guards against a dropped message.
 import { ajax } from "discourse/lib/ajax";
 import { iconHTML } from "discourse/lib/icon-library";
 import { i18n } from "discourse-i18n";
@@ -14,7 +14,7 @@ import DiscourseURL from "discourse/lib/url";
 
 const container = () => window.Discourse?.__container__;
 
-// The jtech theme's expand icon (same markup as the theme's jt-card__peek).
+// The jtech theme's Quick-look expand icon (same markup as jt-card__peek).
 const JT_EXPAND_SVG =
   '<svg class="fa d-icon d-icon-expand svg-icon fa-width-auto svg-string" width="1em" height="1em" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><use href="#jt-expand"></use></svg>';
 
@@ -30,11 +30,18 @@ let pollTimer = null;
 let permalinkHandled = false;
 const viewedInSession = new Set();
 let tagFilter = null;
+let busStarted = false;
+let editing = null; // { id } while a message is being edited
+let emojiMap = null;
+let emojiPromise = null;
+let tagListPromise = null;
 
 const maxId = () => {
   let max = lastSeenId;
   for (const id of messages.keys()) {
-    if (id > max) max = id;
+    if (id > max) {
+      max = id;
+    }
   }
   return max;
 };
@@ -46,7 +53,7 @@ const catchUp = () => {
   loadMessages(maxId());
 };
 
-const loadMessages = (afterId = 0) => {
+function loadMessages(afterId = 0) {
   let qs = afterId > 0 ? `?after_id=${afterId}` : "";
   if (tagFilter) {
     qs += (qs ? "&" : "?") + `tag=${encodeURIComponent(tagFilter)}`;
@@ -77,15 +84,14 @@ const loadMessages = (afterId = 0) => {
         }
       }
     })
-    .catch(() => {
+    .catch((e) => {
       // allow a later mount/poll to retry
       loading = false;
-      widgets.forEach((w) => w.showError());
+      if (e?.jqXHR?.status !== 403) {
+        widgets.forEach((w) => w.showError());
+      }
     });
-};
-
-let busStarted = false;
-let editing = null; // { id } while a message is being edited
+}
 
 const startShared = () => {
   if (!busStarted) {
@@ -102,17 +108,16 @@ const startShared = () => {
               pm.reply_count = (pm.reply_count || 0) + 1;
               widgets.forEach((w) => {
                 const btn = w.els.list.querySelector(
-                  `[data-id="${m.reply_to_id}"] .shoutbox__comment-btn`,
+                  `[data-id="${m.reply_to_id}"] .shoutbox__comment-btn`
                 );
-                if (!btn) {
-                  return;
+                if (btn) {
+                  let label = btn.querySelector(".number");
+                  if (!label) {
+                    label = el("span", "number");
+                    btn.appendChild(label);
+                  }
+                  label.textContent = String(pm.reply_count);
                 }
-                let label = btn.querySelector(".shoutbox__action-label");
-                if (!label) {
-                  label = el("span", "shoutbox__action-label");
-                  btn.appendChild(label);
-                }
-                label.textContent = String(pm.reply_count);
               });
             }
           }
@@ -141,7 +146,7 @@ const startShared = () => {
           }
           widgets.forEach((w) => {
             const btn = w.els.list.querySelector(
-              `[data-id="${data.id}"] .shoutbox__like`,
+              `[data-id="${data.id}"] .shoutbox__like`
             );
             if (btn) {
               renderLikeBtn(btn, m || { like_count: data.like_count, liked: data.liked });
@@ -166,9 +171,9 @@ const startShared = () => {
               if (pm && pm.reply_count > 0) {
                 pm.reply_count -= 1;
                 const btn = w.els.list.querySelector(
-                  `[data-id="${dead.reply_to_id}"] .shoutbox__comment-btn`,
+                  `[data-id="${dead.reply_to_id}"] .shoutbox__comment-btn`
                 );
-                const label = btn?.querySelector(".shoutbox__action-label");
+                const label = btn?.querySelector(".number");
                 if (label) {
                   if (pm.reply_count > 0) {
                     label.textContent = String(pm.reply_count);
@@ -188,7 +193,7 @@ const startShared = () => {
         if (document.visibilityState === "visible") {
           catchUp();
         }
-      }, 60_000);
+      }, 60000);
     }
   }
 
@@ -200,11 +205,9 @@ const startShared = () => {
 
 // ── rich text rendering ──────────────────────────────────────────────────────
 
-let emojiMap = null;
-let emojiPromise = null;
-const loadEmojis = () => {
+function loadEmojis() {
   emojiPromise ||=
-    ajax("/emojis.json", { dataType: "json" })
+    ajax("/emojis.json")
       .then((groups) => {
         const map = new Map();
         Object.values(groups || {}).forEach((group) =>
@@ -212,7 +215,7 @@ const loadEmojis = () => {
             if (e?.name && e.url) {
               map.set(e.name, e.url);
             }
-          }),
+          })
         );
         emojiMap = map;
         return map;
@@ -222,24 +225,27 @@ const loadEmojis = () => {
         return emojiMap;
       });
   return emojiPromise;
-};
+}
 
 const topicTitles = new Map();
-const topicTitle = (id) => {
+function topicTitle(id) {
   topicTitles.set(
     id,
     topicTitles.get(id) ||
       ajax(`/t/${id}.json`)
         .then((d) => String(d?.title || "").trim())
-        .catch(() => ""),
+        .catch(() => "")
   );
   return topicTitles.get(id);
-};
+}
 
 const URL_SPLIT = /(https?:\/\/[^\s<>"']+)/g;
 const TRAILING_PUNCT = /[)\]}>,.!?;:'"，。！？；：、）》〉】\]]+$/;
 const EMOJI_SPLIT = /(:[a-zA-Z0-9_+-]+:)/g;
 const MENTION_SPLIT = /(@[a-zA-Z0-9_](?:[a-zA-Z0-9_.-]*[a-zA-Z0-9_])?)/g;
+const TAG_SPLIT = /(#[a-zA-Z0-9_-]+)/g;
+const QUOTE_SPLIT = /(\[quote(?:="([^"]*)")?\]([\s\S]*?)\[\/quote\])/g;
+const MD_SPLIT = /(\*\*[^*]+\*\*|`[^`\n]+`|\*[^*\n]+\*)/g;
 
 const makeLink = (href, cls) => {
   const a = document.createElement("a");
@@ -249,7 +255,7 @@ const makeLink = (href, cls) => {
   return a;
 };
 
-const appendUrlNode = (parent, raw) => {
+function appendUrlNode(parent, raw) {
   const punct = raw.match(TRAILING_PUNCT)?.[0] || "";
   const url = punct ? raw.slice(0, -punct.length) : raw;
 
@@ -288,7 +294,7 @@ const appendUrlNode = (parent, raw) => {
   if (punct) {
     parent.appendChild(document.createTextNode(punct));
   }
-};
+}
 
 const appendTextWithMentions = (parent, text) => {
   text.split(MENTION_SPLIT).forEach((part) => {
@@ -301,23 +307,21 @@ const appendTextWithMentions = (parent, text) => {
       a.textContent = part;
       parent.appendChild(a);
     } else {
-      appendTextWithMD(parent, part);
+      appendTextWithTag(parent, part);
     }
   });
 };
-
-const TAG_SPLIT = /(#[a-zA-Z0-9_\-]+)/g;
 
 function appendTextWithTag(parent, text) {
   text.split(TAG_SPLIT).forEach((part) => {
     if (!part) {
       return;
     }
-    const m = part.match(/^#([a-zA-Z0-9_\-]+)$/);
+    const m = part.match(/^#([a-zA-Z0-9_-]+)$/);
     if (m) {
       const a = makeLink(
         `/shoutbox?tag=${encodeURIComponent(m[1].toLowerCase())}`,
-        "shoutbox__tag",
+        "shoutbox__tag"
       );
       a.textContent = part;
       parent.appendChild(a);
@@ -335,12 +339,15 @@ function appendTextWithMD(parent, text) {
     }
     if (/^\*\*[^*]+\*\*$/.test(part)) {
       parent.appendChild(el("strong", null, part.slice(2, -2)));
+    } else if (/^`[^`\n]+`$/.test(part)) {
+      parent.appendChild(el("code", "shoutbox__code", part.slice(1, -1)));
+    } else if (/^\*[^*\n]+\*$/.test(part)) {
+      parent.appendChild(el("em", null, part.slice(1, -1)));
     } else {
-      appendTextWithMD(parent, part);
+      parent.appendChild(document.createTextNode(part));
     }
   });
 }
-
 
 const appendTextWithEmoji = (parent, text) => {
   text.split(EMOJI_SPLIT).forEach((part) => {
@@ -358,16 +365,13 @@ const appendTextWithEmoji = (parent, text) => {
       img.loading = "lazy";
       parent.appendChild(img);
     } else {
-      // plain text, or an emoji code the site doesn't know
       appendTextWithMentions(parent, part);
     }
   });
 };
 
-const QUOTE_SPLIT = /(\[quote(?:="([^"]*)")?\]([\s\S]*?)\[\/quote\])/g;
-
-// Splits quote blocks out first, then URLs, so nothing mangles anything else.
-const renderRichText = (parent, text) => {
+// Quote blocks first, then line-level markdown, then the inline chain.
+function renderRichText(parent, text) {
   text.split(QUOTE_SPLIT).forEach((part) => {
     if (!part) {
       return;
@@ -388,7 +392,7 @@ const renderRichText = (parent, text) => {
     }
     renderLines(parent, part);
   });
-};
+}
 
 // Line-level markdown: headings (# ## ###), bullet lists (- ), paragraphs.
 function renderLines(parent, text) {
@@ -407,7 +411,7 @@ function renderLines(parent, text) {
       flushList();
       const hd = el(
         "div",
-        `shoutbox__heading shoutbox__heading--${Math.min(h[1].length + 1, 4)}`,
+        `shoutbox__heading shoutbox__heading--${Math.min(h[1].length + 1, 4)}`
       );
       renderInline(hd, h[2]);
       parent.appendChild(hd);
@@ -432,8 +436,6 @@ function renderLines(parent, text) {
 }
 
 // Inline markdown: bold / italic / inline code, then the existing chain.
-const MD_SPLIT = /(\*\*[^*]+\*\*|`[^`\n]+`|\*[^*\n]+\*)/g;
-
 function renderInline(parent, text) {
   text.split(MD_SPLIT).forEach((part) => {
     if (!part) {
@@ -453,61 +455,7 @@ function renderInline(parent, text) {
 
 // ── widget ───────────────────────────────────────────────────────────────────
 
-const esc = (s) => String(s ?? "");
-const userHref = (m) => `/u/${esc(m.user?.username).toLowerCase()}`;
-const avatarSrc = (m, size = 48) =>
-  esc(m.user?.avatar_template || "").replace("{size}", String(size));
-
-const insertAtCursor = (textarea, text) => {
-  const start = textarea.selectionStart ?? textarea.value.length;
-  const end = textarea.selectionEnd ?? textarea.value.length;
-  textarea.value = textarea.value.slice(0, start) + text + textarea.value.slice(end);
-  const pos = start + text.length;
-  textarea.setSelectionRange(pos, pos);
-  textarea.focus();
-};
-
-// Wraps the textarea selection (or inserts an empty pair at the caret).
-function wrapSelection(widget, before, after) {
-  const ta = widget.els.composer;
-  if (!ta) {
-    return;
-  }
-  const start = ta.selectionStart ?? ta.value.length;
-  const end = ta.selectionEnd ?? ta.value.length;
-  const sel = ta.value.slice(start, end);
-  ta.value = ta.value.slice(0, start) + before + sel + after + ta.value.slice(end);
-  const pos = start + before.length + sel.length;
-  ta.setSelectionRange(pos - after.length, pos - after.length);
-  ta.focus();
-  ta.dispatchEvent(new Event("input"));
-}
-
-// Prefixes the current line (headings, bullet lists).
-function prefixLine(widget, prefix) {
-  const ta = widget.els.composer;
-  if (!ta) {
-    return;
-  }
-  const start = ta.selectionStart ?? ta.value.length;
-  const lineStart = ta.value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
-  ta.value = ta.value.slice(0, lineStart) + prefix + ta.value.slice(lineStart);
-  const pos = start + prefix.length;
-  ta.setSelectionRange(pos, pos);
-  ta.focus();
-  ta.dispatchEvent(new Event("input"));
-}
-
-const el = (tag, cls, text) => {
-  const node = document.createElement(tag);
-  if (cls) {
-    node.className = cls;
-  }
-  if (text !== undefined) {
-    node.textContent = text;
-  }
-  return node;
-};
+// ── widget ───────────────────────────────────────────────────────────────────
 
 export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
   const widget = { rootEl, variant, els: {}, destroyed: false };
@@ -531,6 +479,7 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
     widget.els.tagsList = el("div", "shoutbox-side__tag-list");
     tagsCard.appendChild(widget.els.tagsList);
     widget.els.tagsCard = tagsCard;
+    widget.els.side.appendChild(tagsCard);
   } else {
     rootEl.classList.add("shoutbox", "shoutbox--panel");
     mount = rootEl;
@@ -614,8 +563,7 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
       widget.els.list.appendChild(buildRow(widget, m, { animate }));
       last = m;
       for (const r of repliesByParent.get(m.id) || []) {
-        const rAnim = r.id > cutoff;
-        widget.els.list.appendChild(buildRow(widget, r, { animate: rAnim, isReply: true }));
+        widget.els.list.appendChild(buildRow(widget, r, { animate }));
         last = r;
       }
     }
@@ -637,26 +585,6 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
     scrollToBottom(widget, forceScroll);
   };
 
-  widget.removeRow = (id) => {
-    widget.els.list.querySelector(`[data-id="${id}"]`)?.remove();
-    showEmptyStateIfNeeded(widget);
-    renderSide(widget);
-  };
-
-  widget.updateRow = (m) => {
-    const old = widget.els.list.querySelector(`[data-id="${m.id}"]`);
-    if (!old) {
-      return;
-    }
-    old.replaceWith(buildRow(widget, m, {}));
-  };
-
-  widget.setEditingChip = (on) => {
-    if (widget.els.editingChip) {
-      widget.els.editingChip.hidden = !on;
-    }
-  };
-
   widget.insertReplyRow = (m) => {
     hideEmptyState(widget);
     const parent = widget.els.list.querySelector(`[data-id="${m.reply_to_id}"]`);
@@ -670,6 +598,20 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
       widget.els.list.appendChild(replyRow);
     }
     renderSide(widget);
+  };
+
+  widget.removeRow = (id) => {
+    widget.els.list.querySelector(`[data-id="${id}"]`)?.remove();
+    showEmptyStateIfNeeded(widget);
+    renderSide(widget);
+  };
+
+  widget.updateRow = (m) => {
+    const old = widget.els.list.querySelector(`[data-id="${m.id}"]`);
+    if (!old) {
+      return;
+    }
+    old.replaceWith(buildRow(widget, m, {}));
   };
 
   widget.showError = () => {
@@ -703,6 +645,31 @@ export function unmountShoutbox(widget) {
 
 // ── pieces ───────────────────────────────────────────────────────────────────
 
+const esc = (s) => String(s ?? "");
+const userHref = (m) => `/u/${esc(m.user?.username).toLowerCase()}`;
+const avatarSrc = (m, size = 48) =>
+  esc(m.user?.avatar_template || "").replace("{size}", String(size));
+
+const insertAtCursor = (textarea, text) => {
+  const start = textarea.selectionStart ?? textarea.value.length;
+  const end = textarea.selectionEnd ?? textarea.value.length;
+  textarea.value = textarea.value.slice(0, start) + text + textarea.value.slice(end);
+  const pos = start + text.length;
+  textarea.setSelectionRange(pos, pos);
+  textarea.focus();
+};
+
+const el = (tag, cls, text) => {
+  const node = document.createElement(tag);
+  if (cls) {
+    node.className = cls;
+  }
+  if (text !== undefined) {
+    node.textContent = text;
+  }
+  return node;
+};
+
 function buildRow(widget, m, { animate = false, isReply = false } = {}) {
   const li = el("li", "shoutbox__item jt-card");
   li.dataset.id = m.id;
@@ -718,7 +685,7 @@ function buildRow(widget, m, { animate = false, isReply = false } = {}) {
     li.classList.add("shoutbox__item--new");
   }
 
-  // meta: avatar + author + handle, flags (pin / row menu) right
+  // meta: author avatar + dual name, pinned flag + row menu right
   const meta = el("div", "jt-card__meta");
   const author = el("span", "shoutbox__author");
   if (m.user?.avatar_template) {
@@ -737,8 +704,7 @@ function buildRow(widget, m, { animate = false, isReply = false } = {}) {
   meta.appendChild(author);
   const flags = el("span", "jt-card__flags");
   if (m.pinned) {
-
-    flags.appendChild(el("span", "jt-pill", `\u{1F4CC} ${i18n("shoutbox.pinned_label")}`));
+    flags.appendChild(el("span", "jt-pill", `📌 ${i18n("shoutbox.pinned_label")}`));
   }
   const menuBtn = el("button", "jt-card__peek btn btn-flat no-text");
   menuBtn.type = "button";
@@ -747,15 +713,15 @@ function buildRow(widget, m, { animate = false, isReply = false } = {}) {
   menuBtn.setAttribute("aria-label", i18n("shoutbox.menu"));
   menuBtn.addEventListener("click", (event) => {
     event.stopPropagation();
-    openRowMenu(widget, m, li);
+    openRowMenu(widget, m, meta);
   });
   flags.appendChild(menuBtn);
   meta.appendChild(flags);
   li.appendChild(meta);
 
   // body: content
-  const body = el("div", "jt-card__body");
-  const text = el("div", "jt-card__text");
+  const body = el("div", "shoutbox__body");
+  const text = el("div", "shoutbox__text");
   if (m.color) {
     text.style.color = m.color;
   }
@@ -764,10 +730,9 @@ function buildRow(widget, m, { animate = false, isReply = false } = {}) {
   li.appendChild(body);
 
   // foot: stats (comment / like / views / time)
-  const foot = el("div", "jt-card__foot");
-  const stats = el("span", "jt-card__stats");
+  const foot = el("div", "shoutbox__foot");
 
-  const commentBtn = el("button", "jt-card__stat shoutbox__stat-btn");
+  const commentBtn = el("button", "shoutbox__stat-btn shoutbox__comment-btn");
   commentBtn.type = "button";
   commentBtn.innerHTML = iconHTML("far-comment");
   if (m.reply_count > 0) {
@@ -776,32 +741,30 @@ function buildRow(widget, m, { animate = false, isReply = false } = {}) {
   commentBtn.title = i18n("shoutbox.comment");
   commentBtn.setAttribute("aria-label", i18n("shoutbox.comment"));
   commentBtn.addEventListener("click", () => toggleCommentBox(widget, m, li));
-  stats.appendChild(commentBtn);
+  foot.appendChild(commentBtn);
 
-  const likeBtn = el("button", "jt-card__stat shoutbox__stat-btn shoutbox__like");
+  const likeBtn = el("button", "shoutbox__stat-btn shoutbox__like");
   likeBtn.type = "button";
   likeBtn.title = i18n("shoutbox.like");
   likeBtn.setAttribute("aria-label", i18n("shoutbox.like"));
   renderLikeBtn(likeBtn, m);
   likeBtn.addEventListener("click", () => toggleLike(widget, m, likeBtn));
-  stats.appendChild(likeBtn);
+  foot.appendChild(likeBtn);
 
-  const views = el("span", "jt-card__stat");
+  const views = el("span", "shoutbox__stat-btn shoutbox__views");
   views.title = i18n("shoutbox.views", { n: m.views || 0 });
   views.innerHTML =
-    iconHTML("far-eye") +
-    '<span class="number">' + (m.views || 0) + "</span>";
-  stats.appendChild(views);
+    iconHTML("far-eye") + '<span class="number">' + (m.views || 0) + "</span>";
+  foot.appendChild(views);
 
-  const activity = el("span", "jt-card__stat --activity");
-  const time = el("span", "relative-date");
+  const activity = el("span", "shoutbox__stat-btn --activity");
   const date = new Date(m.created_at);
+  const time = el("span", "relative-date");
   time.textContent = relativeAge(date, { format: "tiny" });
   time.title = date.toLocaleString();
   activity.appendChild(time);
-  stats.appendChild(activity);
+  foot.appendChild(activity);
 
-  foot.appendChild(stats);
   li.appendChild(foot);
 
   return li;
@@ -881,7 +844,6 @@ function cancelEdit(widget) {
 }
 
 function openRowMenu(widget, m, container) {
-  // one menu at a time, per row
   container.querySelector(":scope > .shoutbox__menu")?.remove();
   const menu = el("div", "shoutbox__menu");
   const add = (label, cls, fn) => {
@@ -925,7 +887,7 @@ function openRowMenu(widget, m, container) {
 // message as a reply (reply_to_id), rendered indented under its parent.
 function toggleCommentBox(widget, m, row) {
   const existing = row.querySelector(
-    `:scope > .shoutbox__comment-box[data-parent="${m.id}"]`,
+    `:scope > .shoutbox__comment-box[data-parent="${m.id}"]`
   );
   widget.els.list.querySelectorAll(".shoutbox__comment-box").forEach((b) => {
     if (b !== existing) {
@@ -1016,40 +978,6 @@ function toggleCommentBox(widget, m, row) {
   });
 }
 
-// Fires the view POST when a message row first scrolls into view.
-const seenObserver = new IntersectionObserver(
-  (entries) => {
-    entries.forEach((entry) => {
-      if (!entry.isIntersecting) {
-        return;
-      }
-      seenObserver.unobserve(entry.target);
-      const id = Number(entry.target.dataset.id);
-      if (!id || viewedInSession.has(id)) {
-        return;
-      }
-      viewedInSession.add(id);
-      ajax(`/shoutbox/messages/${id}/view`, { type: "POST" })
-        .then((payload) => {
-          const m = messages.get(id);
-          if (m && payload?.views != null) {
-            m.views = payload.views;
-            widgets.forEach((w) => {
-              const elv = w.els.list.querySelector(
-                `[data-id="${id}"] .shoutbox__action--views .shoutbox__action-label`,
-              );
-              if (elv) {
-                elv.textContent = payload.views;
-              }
-            });
-          }
-        })
-        .catch(() => {});
-    });
-  },
-  { threshold: 0.5 },
-);
-
 function scrollToBottom(widget, force = false) {
   const list = widget.els.list;
   requestAnimationFrame(() => {
@@ -1097,7 +1025,7 @@ function renderSide(widget) {
       a.textContent = esc(user?.username);
       rowEl.appendChild(a);
       rowEl.appendChild(
-        el("span", "shoutbox-side__count", i18n("shoutbox.side_count", { n: count })),
+        el("span", "shoutbox-side__count", i18n("shoutbox.side_count", { n: count }))
       );
       active.appendChild(rowEl);
     });
@@ -1106,7 +1034,7 @@ function renderSide(widget) {
   const about = el("div", "shoutbox-side__card");
   about.appendChild(el("div", "shoutbox-side__title", i18n("shoutbox.title")));
   about.appendChild(
-    el("p", "shoutbox-side__text", i18n("shoutbox.side_about", { n: messages.size })),
+    el("p", "shoutbox-side__text", i18n("shoutbox.side_about", { n: messages.size }))
   );
 
   if (widget.els.tagsCard) {
@@ -1116,7 +1044,6 @@ function renderSide(widget) {
   }
 }
 
-let tagListPromise = null;
 function loadTagList() {
   tagListPromise ||= ajax("/shoutbox/tags.json")
     .then((d) => d.tags || [])
@@ -1142,7 +1069,7 @@ function fillTagsCard(widget) {
     tags.forEach(({ name, count }) => {
       const a = makeLink(
         `/shoutbox?tag=${encodeURIComponent(name)}`,
-        "shoutbox-side__tag",
+        "shoutbox-side__tag"
       );
       a.textContent = `#${name}`;
       a.appendChild(el("span", "shoutbox-side__count", String(count)));
@@ -1171,21 +1098,6 @@ function renderFoot(widget) {
     return;
   }
   widget.els.footSig = sig;
-
-  // Panel variant: no inline composer at all. The head's ＋ button toggles the
-  // compose popup; the expand button goes to the full page. Anon/not-allowed
-  // is expressed by hiding ＋ entirely.
-  if (widget.variant === "panel") {
-    foot.replaceChildren();
-    if (widget.els.plusBtn) {
-      widget.els.plusBtn.hidden = !(viewer && viewer.can_post);
-    }
-    if (viewer && viewer.can_post) {
-      buildComposerInto(widget, widget.els.composePop);
-    }
-    return;
-  }
-
   foot.replaceChildren();
 
   if (viewer && !viewer.signed_in) {
@@ -1200,12 +1112,6 @@ function renderFoot(widget) {
     return;
   }
 
-  buildComposerInto(widget, foot);
-}
-
-function buildComposerInto(widget, host) {
-  // memos-style composer: avatar + borderless editor, then a hairline bar
-  // with the icon strip on the left and the publish pill on the right.
   const row = el("div", "shoutbox__composer-row");
 
   if (viewer?.avatar_template) {
@@ -1217,34 +1123,8 @@ function buildComposerInto(widget, host) {
 
   const col = el("div", "shoutbox__composer-col");
 
-  const ta = el("textarea", "shoutbox__composer");
-  ta.rows = 1;
-  ta.maxLength = viewer?.max_length || 200;
-  ta.placeholder = i18n("shoutbox.placeholder");
-  widget.els.composer = ta;
-  col.appendChild(ta);
-
   const bar = el("div", "shoutbox__composer-bar");
   const icons = el("div", "shoutbox__composer-icons");
-
-  const fmtBtn = (iconName, titleKey, fn) => {
-    const b = el("button", "shoutbox__composer-btn");
-    b.type = "button";
-    b.title = i18n(titleKey);
-    b.setAttribute("aria-label", i18n(titleKey));
-    b.innerHTML = iconHTML(iconName);
-    b.addEventListener("click", () => fn());
-    icons.appendChild(b);
-    return b;
-  };
-
-  fmtBtn("bold", "shoutbox.bold", () => wrapSelection(widget, "**", "**"));
-  fmtBtn("italic", "shoutbox.italic", () => wrapSelection(widget, "*", "*"));
-  fmtBtn("heading", "shoutbox.heading", () => prefixLine(widget, "## "));
-  fmtBtn("list-ul", "shoutbox.list", () => prefixLine(widget, "- "));
-  fmtBtn("quote-right", "shoutbox.quote", () =>
-    wrapSelection(widget, "[quote]\n", "\n[/quote]\n"),
-  );
 
   const emojiBtn = el("button", "shoutbox__composer-btn shoutbox__emoji-btn");
   emojiBtn.type = "button";
@@ -1253,24 +1133,17 @@ function buildComposerInto(widget, host) {
   emojiBtn.innerHTML = iconHTML("face-smile");
   icons.appendChild(emojiBtn);
 
-  const count = el("span", "shoutbox__count");
-  icons.appendChild(count);
-
   bar.appendChild(icons);
 
+  const ta = el("textarea", "shoutbox__composer");
+  ta.rows = 1;
+  ta.maxLength = viewer?.max_length || 200;
+  ta.placeholder = i18n("shoutbox.placeholder");
+  widget.els.composer = ta;
+  col.appendChild(ta);
+
   const actions = el("div", "shoutbox__composer-actions");
-  const send = el("button", "shoutbox__send");
-  send.type = "button";
-  send.textContent = i18n("shoutbox.publish");
-  send.disabled = true; // memos-style: grey pill until there is text
-  widget.els.sendBtn = send;
-  actions.appendChild(send);
-  bar.appendChild(actions);
-
-  col.appendChild(bar);
-  row.appendChild(col);
-  host.appendChild(row);
-
+  const count = el("span", "shoutbox__count");
   const updateCount = () => {
     // NB: don't name the option "count" — that makes Discourse's i18n look
     // for pluralized key variants (shoutbox.count.one/other).
@@ -1280,10 +1153,21 @@ function buildComposerInto(widget, host) {
     });
     send.disabled = ta.value.trim().length === 0;
   };
-  updateCount();
-  ta.addEventListener("input", updateCount);
+  actions.appendChild(count);
 
-  const emojiPop = widget.rootEl.querySelector(".shoutbox__emoji-pop");
+  const send = el("button", "shoutbox__send");
+  send.type = "button";
+  send.textContent = i18n("shoutbox.publish");
+  send.disabled = true;
+  widget.els.sendBtn = send;
+  actions.appendChild(send);
+  bar.appendChild(actions);
+
+  col.appendChild(bar);
+  row.appendChild(col);
+  foot.appendChild(row);
+
+  const emojiPop = widget.mountEl.querySelector(".shoutbox__emoji-pop");
   emojiBtn.addEventListener("click", () => {
     emojiPop.hidden = !emojiPop.hidden;
     if (emojiPop.hidden) {
@@ -1316,7 +1200,7 @@ function buildComposerInto(widget, host) {
     }
   });
 
-  const mentionPop = widget.rootEl.querySelector(".shoutbox__mention-pop");
+  const mentionPop = widget.mountEl.querySelector(".shoutbox__mention-pop");
   let mentionSeq = 0;
   let mentionItems = [];
   let mentionIndex = -1;
@@ -1389,15 +1273,6 @@ function buildComposerInto(widget, host) {
   ta.addEventListener("click", closeMention);
   ta.addEventListener("blur", () => setTimeout(closeMention, 150));
   ta.addEventListener("keydown", (event) => {
-    if ((event.ctrlKey || event.metaKey) && ["b", "i"].includes(event.key.toLowerCase())) {
-      event.preventDefault();
-      if (event.key.toLowerCase() === "b") {
-        wrapSelection(widget, "**", "**");
-      } else {
-        wrapSelection(widget, "*", "*");
-      }
-      return;
-    }
     if (!mentionPop.hidden) {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
@@ -1429,19 +1304,6 @@ function buildComposerInto(widget, host) {
     }
   });
 
-  // editing indicator (shown while a message is being edited)
-  const chip = el("div", "shoutbox__editing");
-  chip.hidden = true;
-  chip.appendChild(el("span", null, "✎ " + i18n("shoutbox.editing")));
-  const chipCancel = el("button", "shoutbox__editing-cancel");
-  chipCancel.type = "button";
-  chipCancel.textContent = "✕";
-  chipCancel.title = i18n("shoutbox.cancel");
-  chipCancel.addEventListener("click", () => cancelEdit(widget));
-  chip.appendChild(chipCancel);
-  host.insertBefore(chip, row);
-  widget.els.editingChip = chip;
-
   send.addEventListener("click", () => submit(widget));
 }
 
@@ -1453,7 +1315,7 @@ function submit(widget) {
     return;
   }
   send.disabled = true;
-  send.innerHTML = i18n("shoutbox.posting");
+  send.textContent = i18n("shoutbox.posting");
 
   const editingId = editing?.id;
   const req = editingId
