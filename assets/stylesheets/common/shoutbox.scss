@@ -796,13 +796,6 @@
   padding: 0.2em 0.4em;
 }
 
-.shoutbox--page .shoutbox__actions {
-  grid-column: 2;
-  margin-top: 0.5em;
-  justify-content: flex-end;
-  max-width: none;
-}
-
 // on phones the five actions spread across the card instead
 @media (width < 48rem) {
   .shoutbox--page .shoutbox__actions {
@@ -1122,4 +1115,9 @@
     color: var(--shoutbox-muted);
     font-size: var(--font-down-2);
   }
+}
+
+// page rows: action icons pinned to the right edge of the card
+.shoutbox--page .shoutbox__item.jt-card .jt-card__foot {
+  justify-content: flex-end;
 }
