@@ -37,6 +37,7 @@ en:
       edit: "Edit"
       editing: "Editing message"
       cancel: "Cancel"
+      save: "Save"
       pin: "Pin to top"
       unpin: "Unpin"
       copy_link: "Copy link"

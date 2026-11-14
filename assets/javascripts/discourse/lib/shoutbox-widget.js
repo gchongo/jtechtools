@@ -906,6 +906,11 @@ function buildRow(widget, m, { animate = false, isReply = false } = {}) {
 
   li.appendChild(foot);
 
+  // in-place editor: the row being edited renders as an editor everywhere
+  if (editing && editing.id === m.id) {
+    applyRowEditor(widget, li, m);
+  }
+
   return li;
 }
 
@@ -956,42 +961,136 @@ function copyMessageLink(m) {
   window.alert(i18n("shoutbox.copied"));
 }
 
+// X-style in-place editing: the row itself turns into an editor (textarea +
+// removable image previews + Cancel/Save). editing = { id, text, pending } —
+// state lives on the module so a background refresh can rebuild the editor
+// without losing typed content.
 function startEdit(widget, m) {
-  editing = { id: m.id };
-  if (widget.els.plusBtn) {
-    widget.els.composePop.hidden = false;
-  }
-  widgets.forEach((w) => w.setEditingChip?.(true));
-  const ta = widget.els.composer;
-  if (!ta) {
+  if (editing) {
     return;
   }
-  // existing images move out of the raw text and back into the attachments
-  // strip, so they render as previews and can be removed like new ones
   const images = [...m.message.matchAll(/!\[([^\]\n]*)\]\(([^)\s]+)[^)]*\)/g)];
-  widget.els.pending = images.map((g, i) => ({
-    id: `edit-${g[1] || i}`,
-    name: g[1] || "image",
-    status: "done",
-    short_url: g[2],
-  }));
-  renderAttachments(widget);
-  ta.value = m.message.replace(IMAGE_MD_RE_G, "").replace(/\n{3,}/g, "\n\n").trim();
-  ta.dispatchEvent(new Event("input"));
-  ta.focus();
+  editing = {
+    id: m.id,
+    text: m.message.replace(IMAGE_MD_RE_G, "").replace(/\n{3,}/g, "\n\n").trim(),
+    pending: images.map((g, i) => ({
+      id: `edit-${g[1] || i}`,
+      name: g[1] || "image",
+      status: "done",
+      short_url: g[2],
+    })),
+  };
+  // re-render the row (in every mounted widget) as the editor
+  widgets.forEach((w) => w.updateRow(m));
 }
 
-function cancelEdit(widget) {
-  editing = null;
-  widgets.forEach((w) => w.setEditingChip?.(false));
-  widget.els.pending = [];
-  renderAttachments(widget);
-  const ta = widget.els.composer;
-  if (ta) {
-    ta.value = "";
-    ta.dispatchEvent(new Event("input"));
-    ta.focus();
+// Replace a row's body with the editor; called from buildRow when the row
+// belongs to the message being edited.
+function applyRowEditor(widget, li, m) {
+  li.classList.add("shoutbox__item--editing");
+  const body = li.querySelector(".shoutbox__body");
+  const foot = li.querySelector(".shoutbox__foot");
+  if (!body) {
+    return;
   }
+  foot?.style.setProperty("display", "none");
+  body.classList.add("shoutbox__body--editing");
+
+  const ta = el("textarea", "shoutbox__edit-input");
+  ta.value = editing.text;
+  ta.maxLength = viewer?.max_length || 200;
+  ta.rows = 3;
+  ta.addEventListener("input", () => {
+    editing.text = ta.value;
+  });
+  ta.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelRowEdit(m);
+    } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      saveRowEdit(widget, ta, saveBtn);
+    }
+  });
+  body.appendChild(ta);
+
+  const grid = el("div", "shoutbox__attachments");
+  grid.dataset.count = String(editing.pending.length);
+  if (editing.pending.length > 0) {
+    editing.pending.forEach((item) => {
+      const cell = el("div", "shoutbox__att-preview");
+      cell.title = item.name;
+      const img = el("img", "shoutbox__att-img");
+      img.src = imageSrcFor(item.short_url);
+      img.alt = item.name;
+      cell.appendChild(img);
+      const remove = el("button", "shoutbox__att-remove");
+      remove.type = "button";
+      remove.title = i18n("shoutbox.attach_remove");
+      remove.setAttribute("aria-label", i18n("shoutbox.attach_remove"));
+      remove.innerHTML = iconHTML("xmark");
+      remove.addEventListener("click", () => {
+        editing.pending = editing.pending.filter((p) => p !== item);
+        grid.dataset.count = String(editing.pending.length);
+        cell.remove();
+      });
+      cell.appendChild(remove);
+      grid.appendChild(cell);
+    });
+    body.appendChild(grid);
+  }
+
+  const actions = el("div", "shoutbox__edit-actions");
+  const cancelBtn = el("button", "shoutbox__edit-cancel");
+  cancelBtn.type = "button";
+  cancelBtn.textContent = i18n("shoutbox.cancel");
+  cancelBtn.addEventListener("click", () => cancelRowEdit(m));
+  actions.appendChild(cancelBtn);
+
+  const saveBtn = el("button", "shoutbox__send shoutbox__edit-save");
+  saveBtn.type = "button";
+  saveBtn.textContent = i18n("shoutbox.save");
+  saveBtn.addEventListener("click", () => saveRowEdit(widget, ta, saveBtn));
+  actions.appendChild(saveBtn);
+
+  body.appendChild(actions);
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+}
+
+function cancelRowEdit(m) {
+  editing = null;
+  const current = messages.get(m.id) || m;
+  widgets.forEach((w) => w.updateRow(current));
+}
+
+function saveRowEdit(widget, ta, saveBtn) {
+  const attachMd = (editing.pending || [])
+    .filter((p) => p.status === "done" && p.short_url)
+    .map((p) => `\n![${p.name.replace(/\.[^.]+$/, "").slice(0, 60) || "image"}](${p.short_url})`)
+    .join("");
+  const text = (ta.value.trim() + attachMd).trim();
+  if (!text) {
+    return;
+  }
+  saveBtn.disabled = true;
+  saveBtn.textContent = i18n("shoutbox.posting");
+  ajax(`/shoutbox/messages/${editing.id}.json`, { type: "PUT", data: { message: text } })
+    .then((payload) => {
+      if (payload?.message) {
+        messages.set(payload.message.id, payload.message);
+        editing = null;
+        widgets.forEach((w) => w.updateRow(payload.message));
+      }
+    })
+    .catch((err) => {
+      const msg =
+        err?.jqXHR?.responseJSON?.errors?.[0] ||
+        (err?.jqXHR?.status === 429 ? i18n("shoutbox.rate_limited") : i18n("shoutbox.send_failed"));
+      window.alert(msg);
+      saveBtn.disabled = false;
+      saveBtn.textContent = i18n("shoutbox.save");
+    });
 }
 
 function openRowMenu(widget, m, container) {
@@ -1737,18 +1836,13 @@ function submit(widget) {
   send.disabled = true;
   send.textContent = i18n("shoutbox.posting");
 
-  const editingId = editing?.id;
-  const req = editingId
-    ? ajax(`/shoutbox/messages/${editingId}.json`, { type: "PUT", data: { message: text } })
-    : ajax("/shoutbox/messages.json", { type: "POST", data: { message: text } });
+  const req = ajax("/shoutbox/messages.json", { type: "POST", data: { message: text } });
 
   req.then((payload) => {
       ta.value = "";
       ta.dispatchEvent(new Event("input"));
       widget.els.pending = [];
       renderAttachments(widget);
-      editing = null;
-      widgets.forEach((w) => w.setEditingChip?.(false));
       if (payload?.message) {
         const m = payload.message;
         const isNew = !messages.has(m.id);

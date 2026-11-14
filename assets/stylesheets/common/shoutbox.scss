@@ -1129,29 +1129,63 @@
 
 }
 
-.shoutbox__editing {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--jt-surface-sunken, var(--primary-very-low));
-  border-radius: var(--jt-radius-sm, 0.4em);
-  padding: 0.3em 0.6em;
-  margin-bottom: 0.4em;
-  font-size: var(--font-down-1);
-  color: var(--shoutbox-muted);
+// X-style in-place editor (the row itself becomes the editor)
+.shoutbox__item--editing {
+  border-color: var(--jt-accent, var(--tertiary));
+}
 
-  &[hidden] {
-    display: none;
+.shoutbox__body--editing {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  padding-top: 0.25em;
+}
+
+.shoutbox__edit-input {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--jt-border, var(--primary-low));
+  border-radius: var(--jt-radius-sm, 0.5em);
+  color: var(--shoutbox-text);
+  font: inherit;
+  line-height: 1.45;
+  padding: 0.5em 0.7em;
+  resize: vertical;
+  min-height: 3.5em;
+
+  &:focus {
+    outline: none;
+    border-color: var(--jt-accent, var(--tertiary));
   }
 }
 
-.shoutbox__editing-cancel {
+.shoutbox__edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.shoutbox__edit-cancel {
   appearance: none;
   border: none;
-  background: transparent;
-  color: var(--danger);
+  background: none;
+  color: var(--shoutbox-muted);
+  font-size: var(--font-down-1);
   cursor: pointer;
-  padding: 0 0.3em;
+  padding: 0.4em 0.6em;
+  border-radius: 999px;
+
+  &:hover {
+    color: var(--shoutbox-text);
+    background: var(--shoutbox-hover);
+  }
+}
+
+// the save button reuses .shoutbox__send (accent pill) via a compound class
+.shoutbox__edit-save {
+  font-size: var(--font-down-1);
+  padding: 0.35em 1em;
 }
 // ── message rows use the theme jt-card anatomy ───────────────────────────────
 // Rows carry the same classes as the homepage topic cards (jt-card +
