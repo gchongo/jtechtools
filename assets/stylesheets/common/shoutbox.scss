@@ -945,6 +945,7 @@
 }
 
 // spans and buttons in the stats strip never carry a fill
+.shoutbox__item .shoutbox__stat-btn,
 .shoutbox__item .jt-card__stat {
   background: transparent;
   border: none;

@@ -524,7 +524,7 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
   widget.els.list = list;
 
   // composer / login area — filled once the viewer payload arrives
-  const foot = el("div", "shoutbox__foot");
+  const foot = el("div", "shoutbox__foot jt-card__foot");
   widget.els.foot = foot;
 
   const popovers = buildPopovers(widget);
@@ -732,7 +732,7 @@ function buildRow(widget, m, { animate = false, isReply = false } = {}) {
   // foot: stats (comment / like / views / time)
   const foot = el("div", "shoutbox__foot");
 
-  const commentBtn = el("button", "shoutbox__stat-btn shoutbox__comment-btn");
+  const commentBtn = el("button", "shoutbox__stat-btn jt-card__stat shoutbox__comment-btn");
   commentBtn.type = "button";
   commentBtn.innerHTML = iconHTML("far-comment");
   if (m.reply_count > 0) {
@@ -743,7 +743,7 @@ function buildRow(widget, m, { animate = false, isReply = false } = {}) {
   commentBtn.addEventListener("click", () => toggleCommentBox(widget, m, li));
   foot.appendChild(commentBtn);
 
-  const likeBtn = el("button", "shoutbox__stat-btn shoutbox__like");
+  const likeBtn = el("button", "shoutbox__stat-btn jt-card__stat shoutbox__like");
   likeBtn.type = "button";
   likeBtn.title = i18n("shoutbox.like");
   likeBtn.setAttribute("aria-label", i18n("shoutbox.like"));
@@ -751,13 +751,13 @@ function buildRow(widget, m, { animate = false, isReply = false } = {}) {
   likeBtn.addEventListener("click", () => toggleLike(widget, m, likeBtn));
   foot.appendChild(likeBtn);
 
-  const views = el("span", "shoutbox__stat-btn shoutbox__views");
+  const views = el("span", "shoutbox__stat-btn jt-card__stat shoutbox__views");
   views.title = i18n("shoutbox.views", { n: m.views || 0 });
   views.innerHTML =
     iconHTML("far-eye") + '<span class="number">' + (m.views || 0) + "</span>";
   foot.appendChild(views);
 
-  const activity = el("span", "shoutbox__stat-btn --activity");
+  const activity = el("span", "shoutbox__stat-btn jt-card__stat --activity");
   const date = new Date(m.created_at);
   const time = el("span", "relative-date");
   time.textContent = relativeAge(date, { format: "tiny" });
