@@ -20,6 +20,13 @@ register_asset "stylesheets/common/shoutbox.scss"
   plus
   xmark
   arrow-up-right-from-square
+  reply
+  heart
+  quote-right
+  link
+  ellipsis-vertical
+  thumbtack
+  pencil
 ].each { |name| register_svg_icon(name) }
 
 module ::DiscourseShoutbox

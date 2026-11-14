@@ -74,6 +74,10 @@ const LINKS: AdminNavLink[] = [
     route: "adminPlugins.show.jtech-tools-mod-elections",
   },
   {
+    label: "jtech_tools.admin.tabs.shoutbox",
+    route: "adminPlugins.show.jtech-tools-shoutbox",
+  },
+  {
     label: "jtech_tools.admin.tabs.all_settings",
     route: "adminPlugins.show.settings",
   },

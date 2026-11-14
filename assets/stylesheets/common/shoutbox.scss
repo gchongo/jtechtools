@@ -2,13 +2,22 @@
 // adapts to any color scheme (including the jtech dark theme) without
 // theme-specific overrides.
 .shoutbox {
-  --shoutbox-border: var(--primary-low);
-  --shoutbox-radius: 0.75em;
+  // jtech theme tokens first, core fallbacks behind them
+  --shoutbox-border: var(--jt-border, var(--primary-low));
+  --shoutbox-surface: var(--jt-surface, var(--secondary));
+  --shoutbox-hover: var(--jt-hover, var(--primary-very-low));
+  --shoutbox-accent: var(--jt-accent, var(--tertiary));
+  --shoutbox-on-accent: var(--jt-on-accent, var(--secondary));
+  --shoutbox-text: var(--jt-text, var(--primary));
+  --shoutbox-muted: var(--jt-text-muted, var(--primary-medium));
+  --shoutbox-radius: var(--jt-radius-lg, 0.75em);
+  --shoutbox-radius-avatar: var(--jt-radius-avatar, 30%);
+  --shoutbox-radius-pill: var(--jt-radius-pill, 999px);
 
   position: relative;
   display: flex;
   flex-direction: column;
-  background: var(--secondary);
+  background: var(--shoutbox-surface);
   border: 1px solid var(--shoutbox-border);
   border-radius: var(--shoutbox-radius);
   // NB: no overflow:hidden here — it would turn .shoutbox into the sticky
@@ -33,7 +42,7 @@
 
 .shoutbox__title {
   font-weight: bold;
-  color: var(--primary);
+  color: var(--shoutbox-text);
   flex: 1 1 auto;
 }
 
@@ -43,7 +52,7 @@
   appearance: none;
   border: none;
   background: transparent;
-  color: var(--tertiary);
+  color: var(--shoutbox-accent);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -54,8 +63,8 @@
   font-size: var(--font-up-1);
 
   &:hover {
-    background: var(--primary-very-low);
-    color: var(--tertiary-hover, var(--tertiary));
+    background: var(--shoutbox-hover);
+    color: var(--shoutbox-accent);
     text-decoration: none;
   }
 
@@ -108,7 +117,7 @@
   align-items: flex-start;
   gap: 0.6em;
   padding: 0.5em 0.85em;
-  border-bottom: 1px solid var(--primary-very-low);
+  border-bottom: 1px solid var(--shoutbox-border);
 
   &:last-child {
     border-bottom: none;
@@ -146,14 +155,14 @@
 .shoutbox__name {
   font-weight: bold;
   font-size: var(--font-down-1);
-  color: var(--primary);
+  color: var(--shoutbox-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 
   &:hover {
     text-decoration: none;
-    color: var(--tertiary);
+    color: var(--shoutbox-accent);
   }
 }
 
@@ -165,7 +174,7 @@
 
 .shoutbox__text {
   margin-top: 0.15em;
-  color: var(--primary);
+  color: var(--shoutbox-text);
   word-break: break-word;
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -196,7 +205,7 @@
   inset-inline: 0;
   bottom: 0;
   height: 3em;
-  background: linear-gradient(to top, var(--secondary) 30%, transparent);
+  background: linear-gradient(to top, var(--shoutbox-surface) 30%, transparent);
   pointer-events: none;
 
   &[hidden] {
@@ -208,7 +217,7 @@
   appearance: none;
   border: none;
   background: transparent;
-  color: var(--tertiary);
+  color: var(--shoutbox-accent);
   cursor: pointer;
   min-height: 2.2em;
   padding: 0.2em 0;
@@ -226,7 +235,7 @@
 }
 
 .shoutbox__link {
-  color: var(--tertiary);
+  color: var(--shoutbox-accent);
 
   &:hover {
     text-decoration: underline;
@@ -234,7 +243,7 @@
 }
 
 .shoutbox__mention {
-  color: var(--tertiary);
+  color: var(--shoutbox-accent);
   font-weight: bold;
 
   &:hover {
@@ -262,7 +271,7 @@
   line-height: 1.2;
 
   &:hover {
-    color: var(--primary);
+    color: var(--shoutbox-accent);
   }
 
   &--delete:hover {
@@ -335,12 +344,12 @@
 }
 
 .shoutbox__send {
-  color: var(--secondary);
-  background: var(--tertiary);
+  color: var(--shoutbox-on-accent);
+  background: var(--shoutbox-accent);
 
   &:hover {
-    color: var(--secondary);
-    background: var(--tertiary-hover, var(--tertiary));
+    color: var(--shoutbox-on-accent);
+    background: var(--tertiary-hover, var(--shoutbox-accent));
   }
 }
 
@@ -703,7 +712,7 @@
   width: 32px;
   height: 32px;
   grid-row: 1;
-  border-radius: 0.65em; // memos squircle, not a circle
+  border-radius: var(--shoutbox-radius-avatar); // jt squircle
   border: 1px solid var(--shoutbox-border);
 }
 
@@ -740,8 +749,8 @@
   transition: background 0.15s ease, color 0.15s ease;
 
   &:hover {
-    background: var(--primary-very-low);
-    color: var(--tertiary);
+    background: var(--shoutbox-hover);
+    color: var(--shoutbox-accent);
   }
 
   &--delete:hover {
@@ -769,4 +778,129 @@
   .shoutbox__emoji-pop {
     grid-template-columns: repeat(6, 2em);
   }
+}
+
+// ── memos-style additions (dual name, row menu, quote, pills) ────────────────
+.shoutbox__handle {
+  color: var(--shoutbox-muted);
+  font-size: var(--font-down-1);
+
+  &:hover {
+    text-decoration: none;
+    color: var(--shoutbox-accent);
+  }
+}
+
+.shoutbox__dot {
+  color: var(--shoutbox-muted);
+}
+
+.shoutbox__meta-actions {
+  position: relative;
+}
+
+.shoutbox__menu-btn {
+  color: var(--shoutbox-muted);
+
+  .d-icon {
+    width: 1em;
+    height: 1em;
+  }
+}
+
+.shoutbox__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: z("dropdown") + 2;
+  min-width: 10em;
+  background: var(--shoutbox-surface);
+  border: 1px solid var(--shoutbox-border);
+  border-radius: var(--jt-radius-md, 0.5em);
+  box-shadow: 0 0.5em 1.5em rgba(0, 0, 0, 0.3);
+  padding: 0.3em;
+}
+
+.shoutbox__menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--shoutbox-text);
+  cursor: pointer;
+  padding: 0.5em 0.7em;
+  border-radius: var(--jt-radius-control, 0.4em);
+  font-size: var(--font-0);
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--shoutbox-hover);
+  }
+
+  &.is-danger {
+    color: var(--danger);
+  }
+}
+
+.shoutbox__quote {
+  border-left: 3px solid var(--shoutbox-accent);
+  background: var(--jt-surface-sunken, var(--primary-very-low));
+  border-radius: var(--jt-radius-sm, 0.4em);
+  padding: 0.5em 0.8em;
+  margin: 0.3em 0;
+}
+
+.shoutbox__quote-author {
+  font-weight: bold;
+  font-size: var(--font-down-1);
+  color: var(--shoutbox-accent);
+  margin-bottom: 0.2em;
+}
+
+.shoutbox__quote-body {
+  color: var(--shoutbox-muted);
+  font-size: var(--font-down-1);
+}
+
+.shoutbox__like.is-liked {
+  color: var(--shoutbox-accent);
+}
+
+.shoutbox__like .shoutbox__action-label {
+  font-size: var(--font-down-1);
+}
+
+.shoutbox__item--pinned {
+  background: var(--jt-surface-sunken, var(--primary-very-low));
+
+  .shoutbox__name::before {
+    content: "📌 ";
+  }
+}
+
+.shoutbox__editing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--jt-surface-sunken, var(--primary-very-low));
+  border-radius: var(--jt-radius-sm, 0.4em);
+  padding: 0.3em 0.6em;
+  margin-bottom: 0.4em;
+  font-size: var(--font-down-1);
+  color: var(--shoutbox-muted);
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.shoutbox__editing-cancel {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+  padding: 0 0.3em;
 }

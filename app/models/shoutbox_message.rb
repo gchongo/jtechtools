@@ -2,6 +2,7 @@
 
 class ShoutboxMessage < ActiveRecord::Base
   belongs_to :user
+  has_many :shoutbox_likes, dependent: :delete_all
 
   validates :user_id, presence: true
   validates :message,

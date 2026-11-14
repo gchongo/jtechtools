@@ -3,16 +3,16 @@ import getURL from "discourse/lib/get-url";
 import type SiteSettingsService from "discourse/services/site-settings";
 import { i18n } from "discourse-i18n";
 
-interface SidebarSection {
-  links?: { value?: string }[];
-}
-
 type DumbcourseSiteSettings = SiteSettingsService & {
   dumbcourse_enabled: boolean;
   dumbcourse_sidebar_link_enabled: boolean;
   dumbcourse_base_path: string;
 };
 
+// A Dumbcourse icon in the sidebar footer's action row (next to the color
+// selector), instead of a text section of its own: easier to reach from the
+// chat page and everywhere else. The row re-renders with the sidebar, so a
+// MutationObserver keeps the button attached.
 export default apiInitializer((api) => {
   const siteSettings: DumbcourseSiteSettings | undefined = api.container.lookup(
     "service:site-settings"
@@ -28,53 +28,29 @@ export default apiInitializer((api) => {
     /^\/+|\/+$/g,
     ""
   );
-
-  // An admin who put a Dumbcourse link in one of the sidebar's own sections
-  // (Community, say) gets that one, not a second in a section of its own.
   const path = getURL(`/${basePath || "dumb"}`);
-  const linkedElsewhere = (): boolean => {
-    const user = api.getCurrentUser() as {
-      sidebar_sections?: SidebarSection[];
-    } | null;
-    const site = api.container.lookup("service:site") as {
-      anonymous_sidebar_sections?: SidebarSection[];
-    };
-    const sections = user
-      ? user.sidebar_sections
-      : site.anonymous_sidebar_sections;
-    return (sections || []).some((section) =>
-      (section.links || []).some(
-        (link) => (link.value || "").replace(/\/+$/, "") === path
-      )
-    );
+  const label = i18n("dumbcourse.sidebar_link_title");
+
+  const addFooterButton = () => {
+    const row = document.querySelector(".sidebar-footer-actions");
+    if (!row || row.querySelector(".dumbcourse-footer-btn")) {
+      return;
+    }
+    const btn = document.createElement("a");
+    btn.className =
+      "btn btn-flat btn-icon no-text sidebar-footer-actions-button dumbcourse-footer-btn";
+    btn.href = path;
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
+    btn.innerHTML =
+      '<svg class="fa d-icon d-icon-mobile-screen-button svg-icon fa-width-auto svg-string" width="1em" height="1em" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><use href="#mobile-screen-button"></use></svg>';
+    row.prepend(btn);
   };
 
-  api.addSidebarSection(
-    (BaseCustomSidebarSection, BaseCustomSidebarSectionLink) => {
-      class DumbcourseLink extends BaseCustomSidebarSectionLink {
-        name = "dumbcourse";
-        classNames = "raw-link";
-        text = i18n("dumbcourse.sidebar_link_text");
-        title = i18n("dumbcourse.sidebar_link_title");
-        href = path;
-        prefixType = "icon";
-        prefixValue = "mobile-screen-button";
-      }
-
-      return class DumbcourseSection extends BaseCustomSidebarSection {
-        name = "dumbcourse";
-        text = i18n("dumbcourse.sidebar_section_title");
-        title = i18n("dumbcourse.sidebar_section_title");
-        hideSectionHeader = true;
-
-        get displaySection() {
-          return !linkedElsewhere();
-        }
-
-        get links() {
-          return [new DumbcourseLink()];
-        }
-      };
-    }
-  );
+  api.onPageChange(() => addFooterButton());
+  new MutationObserver(addFooterButton).observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
+  addFooterButton();
 });

@@ -1,7 +1,7 @@
 en:
   js:
     shoutbox:
-      title: "Message Board"
+      title: "Moments"
       open: "Open the full message board"
       compose: "New message"
       placeholder: "What's happening?"
@@ -22,6 +22,16 @@ en:
       emoji_picker: "Emoji"
       show_more: "Show more"
       show_less: "Show less"
+      menu: "More"
+      edit: "Edit"
+      editing: "Editing message"
+      cancel: "Cancel"
+      pin: "Pin to top"
+      unpin: "Unpin"
+      copy_link: "Copy link"
+      copied: "Link copied!"
+      quote: "Quote"
+      like: "Like"
       external_link: "External link"
       topic_link: "Open topic"
       side_active: "Most active"
@@ -823,6 +833,7 @@ en:
           reqpm: REQ-PM
           listing_format: Listing format
           mod_elections: Mod elections
+          shoutbox: Shoutbox
           all_settings: All settings
   admin_js:
     admin:

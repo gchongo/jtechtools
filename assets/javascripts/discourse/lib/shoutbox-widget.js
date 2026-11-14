@@ -27,6 +27,7 @@ let loaded = false;
 let loading = false;
 let lastSeenId = 0;
 let pollTimer = null;
+let permalinkHandled = false;
 
 const maxId = () => {
   let max = lastSeenId;
@@ -55,6 +56,21 @@ const loadMessages = (afterId = 0) => {
       });
       loaded = true;
       widgets.forEach((w) => w.refresh({ animateFromId: afterId > 0 ? afterId : null }));
+      if (afterId === 0 && !permalinkHandled) {
+        permalinkHandled = true;
+        const h = window.location.hash.match(/^#m-(\d+)$/);
+        if (h) {
+          setTimeout(() => {
+            widgets.forEach((w) => {
+              const row = w.els.list.querySelector(`[data-id="${h[1]}"]`);
+              if (row) {
+                row.scrollIntoView({ block: "center" });
+                row.classList.add("shoutbox__item--new");
+              }
+            });
+          }, 300);
+        }
+      }
     })
     .catch(() => {
       // allow a later mount/poll to retry
@@ -64,6 +80,7 @@ const loadMessages = (afterId = 0) => {
 };
 
 let busStarted = false;
+let editing = null; // { id } while a message is being edited
 
 const startShared = () => {
   if (!busStarted) {
@@ -80,6 +97,36 @@ const startShared = () => {
           messages.set(m.id, m);
           lastSeenId = Math.max(lastSeenId, m.id);
           widgets.forEach((w) => w.appendRow(m, { isNew: true }));
+        } else if (data?.type === "updated" && data.message) {
+          const m = data.message;
+          if (!messages.has(m.id)) {
+            return;
+          }
+          messages.set(m.id, m);
+          widgets.forEach((w) => w.updateRow(m));
+        } else if (data?.type === "liked") {
+          const m = messages.get(data.id);
+          if (m) {
+            m.like_count = data.like_count;
+            m.liked = data.liked;
+          }
+          widgets.forEach((w) => {
+            const btn = w.els.list.querySelector(
+              `[data-id="${data.id}"] .shoutbox__like`,
+            );
+            if (btn) {
+              renderLikeBtn(btn, m || { like_count: data.like_count, liked: data.liked });
+            }
+          });
+        } else if (data?.type === "pinned") {
+          const m = messages.get(data.id);
+          if (m) {
+            m.pinned = data.pinned;
+          }
+          // pinned ordering changes — refetch the list
+          loading = false;
+          loaded = false;
+          startShared();
         } else if (data?.type === "deleted" && messages.has(data.id)) {
           messages.delete(data.id);
           widgets.forEach((w) => w.removeRow(data.id));
@@ -232,17 +279,34 @@ const appendTextWithEmoji = (parent, text) => {
   });
 };
 
-// Splits URLs out first so links never get mangled by the other tokenizers.
+const QUOTE_SPLIT = /(\[quote="([^"]*)"\]([\s\S]*?)\[\/quote\])/g;
+
+// Splits quote blocks out first, then URLs, so nothing mangles anything else.
 const renderRichText = (parent, text) => {
-  text.split(URL_SPLIT).forEach((part) => {
+  text.split(QUOTE_SPLIT).forEach((part) => {
     if (!part) {
       return;
     }
-    if (/^https?:\/\//.test(part)) {
-      appendUrlNode(parent, part);
-    } else {
-      appendTextWithEmoji(parent, part);
+    const q = part.match(/^\[quote="([^"]*)"\]([\s\S]*)\[\/quote\]$/);
+    if (q) {
+      const bq = el("blockquote", "shoutbox__quote");
+      bq.appendChild(el("div", "shoutbox__quote-author", `@${q[1]}`));
+      const body = el("div", "shoutbox__quote-body");
+      renderRichText(body, q[2].trim());
+      bq.appendChild(body);
+      parent.appendChild(bq);
+      return;
     }
+    part.split(URL_SPLIT).forEach((seg) => {
+      if (!seg) {
+        return;
+      }
+      if (/^https?:\/\//.test(seg)) {
+        appendUrlNode(parent, seg);
+      } else {
+        appendTextWithEmoji(parent, seg);
+      }
+    });
   });
 };
 
@@ -382,6 +446,20 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
     renderSide(widget);
   };
 
+  widget.updateRow = (m) => {
+    const old = widget.els.list.querySelector(`[data-id="${m.id}"]`);
+    if (!old) {
+      return;
+    }
+    old.replaceWith(buildRow(widget, m, {}));
+  };
+
+  widget.setEditingChip = (on) => {
+    if (widget.els.editingChip) {
+      widget.els.editingChip.hidden = !on;
+    }
+  };
+
   widget.showError = () => {
     widget.els.list.replaceChildren(el("li", "shoutbox__msg", i18n("shoutbox.load_failed")));
   };
@@ -427,9 +505,16 @@ function buildRow(widget, m, { animate = false } = {}) {
   const main = el("div", "shoutbox__main");
   const line = el("div", "shoutbox__meta-line");
 
+  // memos-style dual name: nickname (or username) bold + @username muted
   const name = makeLink(userHref(m), "shoutbox__name");
-  name.textContent = esc(m.user?.username);
+  name.textContent = esc(m.user?.name || m.user?.username);
   line.appendChild(name);
+
+  const handle = makeLink(userHref(m), "shoutbox__handle");
+  handle.textContent = `@${esc(m.user?.username)}`;
+  line.appendChild(handle);
+
+  line.appendChild(el("span", "shoutbox__dot", "·"));
 
   const time = el("span", "shoutbox__time");
   const date = new Date(m.created_at);
@@ -437,26 +522,19 @@ function buildRow(widget, m, { animate = false } = {}) {
   time.title = date.toLocaleString();
   line.appendChild(time);
 
-  // memos-style: row-level actions sit at the right of the header line
+  // memos-style: row actions (copy link / edit / delete / pin) behind ⁝
   const metaActions = el("span", "shoutbox__meta-actions");
-  if (m.can_delete) {
-    const del = el("button", "shoutbox__action shoutbox__action--delete");
-    del.type = "button";
-    del.textContent = "✕";
-    del.title = i18n("shoutbox.delete");
-    del.setAttribute("aria-label", i18n("shoutbox.delete"));
-    del.addEventListener("click", () => {
-      if (!window.confirm(i18n("shoutbox.confirm_delete"))) {
-        return;
-      }
-      del.disabled = true;
-      ajax(`/shoutbox/messages/${m.id}.json`, { type: "DELETE" })
-        .catch((err) => {
-          del.disabled = false;
-          window.alert(err?.jqXHR?.responseJSON?.errors?.[0] || i18n("shoutbox.send_failed"));
-        });
+  if (m.can_edit || m.can_delete || viewer?.staff) {
+    const dots = el("button", "shoutbox__action shoutbox__menu-btn");
+    dots.type = "button";
+    dots.innerHTML = iconHTML("ellipsis-vertical");
+    dots.title = i18n("shoutbox.menu");
+    dots.setAttribute("aria-label", i18n("shoutbox.menu"));
+    dots.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openRowMenu(widget, m, metaActions);
     });
-    metaActions.appendChild(del);
+    metaActions.appendChild(dots);
   }
   line.appendChild(metaActions);
   main.appendChild(line);
@@ -491,13 +569,14 @@ function buildRow(widget, m, { animate = false } = {}) {
   }
   li.appendChild(main);
 
-  // memos-style bottom action bar
+  // memos-style bottom action bar: reply / quote / like
   const actions = el("div", "shoutbox__actions");
 
-  const reply = el("button", "shoutbox__action shoutbox__action--reply");
+  const reply = el("button", "shoutbox__action shoutbox__action--pill");
   reply.type = "button";
-  reply.textContent = "↩ Reply";
+  reply.innerHTML = iconHTML("reply");
   reply.title = i18n("shoutbox.reply", { username: m.user?.username || "" });
+  reply.setAttribute("aria-label", i18n("shoutbox.reply", { username: m.user?.username || "" }));
   reply.addEventListener("click", () => {
     // on the panel the composer lives inside the ＋ popup — open it first
     if (widget.els.plusBtn) {
@@ -509,9 +588,150 @@ function buildRow(widget, m, { animate = false } = {}) {
     }
   });
   actions.appendChild(reply);
+
+  const quote = el("button", "shoutbox__action shoutbox__action--pill");
+  quote.type = "button";
+  quote.innerHTML = iconHTML("quote-right");
+  quote.title = i18n("shoutbox.quote");
+  quote.setAttribute("aria-label", i18n("shoutbox.quote"));
+  quote.addEventListener("click", () => {
+    if (widget.els.plusBtn) {
+      widget.els.composePop.hidden = false;
+    }
+    const ta = widget.els.composer;
+    if (ta) {
+      const excerpt = esc(m.message).slice(0, 200);
+      insertAtCursor(ta, `[quote="@${m.user?.username}"]\n${excerpt}\n[/quote]\n`);
+    }
+  });
+  actions.appendChild(quote);
+
+  const likeBtn = el("button", "shoutbox__action shoutbox__action--pill shoutbox__like");
+  likeBtn.type = "button";
+  likeBtn.title = i18n("shoutbox.like");
+  likeBtn.setAttribute("aria-label", i18n("shoutbox.like"));
+  renderLikeBtn(likeBtn, m);
+  likeBtn.addEventListener("click", () => toggleLike(widget, m, likeBtn));
+  actions.appendChild(likeBtn);
+
   li.appendChild(actions);
 
   return li;
+}
+
+function renderLikeBtn(btn, m) {
+  btn.innerHTML =
+    iconHTML("heart") +
+    (m.like_count > 0 ? '<span class="shoutbox__action-label">' + m.like_count + "</span>" : "");
+  btn.classList.toggle("is-liked", !!m.liked);
+}
+
+function toggleLike(widget, m, btn) {
+  if (!viewer?.signed_in) {
+    window.location.href = "/login";
+    return;
+  }
+  btn.disabled = true;
+  ajax(`/shoutbox/messages/${m.id}/like`, { type: "POST" })
+    .then((payload) => {
+      const msg = messages.get(m.id);
+      if (msg) {
+        msg.like_count = payload.like_count;
+        msg.liked = payload.liked;
+      }
+      renderLikeBtn(btn, msg || Object.assign({}, m, payload));
+    })
+    .catch((err) => {
+      window.alert(err?.jqXHR?.responseJSON?.errors?.[0] || i18n("shoutbox.send_failed"));
+    })
+    .finally(() => {
+      btn.disabled = false;
+    });
+}
+
+// ── row menu (copy link / edit / delete / pin) ───────────────────────────────
+function deleteMessage(widget, m) {
+  if (!window.confirm(i18n("shoutbox.confirm_delete"))) {
+    return;
+  }
+  ajax(`/shoutbox/messages/${m.id}.json`, { type: "DELETE" }).catch((err) => {
+    window.alert(err?.jqXHR?.responseJSON?.errors?.[0] || i18n("shoutbox.send_failed"));
+  });
+}
+
+function copyMessageLink(m) {
+  const url = `${window.location.origin}/shoutbox#m-${m.id}`;
+  navigator.clipboard
+    ? navigator.clipboard.writeText(url).catch(() => {})
+    : window.prompt(i18n("shoutbox.copy_link"), url);
+  window.alert(i18n("shoutbox.copied"));
+}
+
+function startEdit(widget, m) {
+  editing = { id: m.id };
+  if (widget.els.plusBtn) {
+    widget.els.composePop.hidden = false;
+  }
+  widgets.forEach((w) => w.setEditingChip?.(true));
+  const ta = widget.els.composer;
+  if (!ta) {
+    return;
+  }
+  ta.value = m.message;
+  ta.dispatchEvent(new Event("input"));
+  ta.focus();
+}
+
+function cancelEdit(widget) {
+  editing = null;
+  widgets.forEach((w) => w.setEditingChip?.(false));
+  const ta = widget.els.composer;
+  if (ta) {
+    ta.value = "";
+    ta.dispatchEvent(new Event("input"));
+    ta.focus();
+  }
+}
+
+function openRowMenu(widget, m, container) {
+  // one menu at a time, per row
+  container.querySelector(".shoutbox__menu")?.remove();
+  const menu = el("div", "shoutbox__menu");
+  const add = (label, cls, fn) => {
+    const b = el("button", "shoutbox__menu-item" + (cls ? " " + cls : ""));
+    b.type = "button";
+    b.textContent = label;
+    b.addEventListener("click", () => {
+      menu.remove();
+      document.removeEventListener("click", close);
+      fn();
+    });
+    menu.appendChild(b);
+  };
+
+  add(i18n("shoutbox.copy_link"), "", () => copyMessageLink(m));
+  if (m.can_edit) {
+    add(i18n("shoutbox.edit"), "", () => startEdit(widget, m));
+  }
+  if (m.can_delete) {
+    add(i18n("shoutbox.delete"), "is-danger", () => deleteMessage(widget, m));
+  }
+  if (viewer?.staff) {
+    add(i18n(m.pinned ? "shoutbox.unpin" : "shoutbox.pin"), "", () => {
+      ajax(`/shoutbox/messages/${m.id}/pin`, { type: "POST" }).catch((err) => {
+        window.alert(err?.jqXHR?.responseJSON?.errors?.[0] || i18n("shoutbox.send_failed"));
+      });
+    });
+  }
+
+  container.appendChild(menu);
+  const close = (event) => {
+    if (!menu.contains(event.target)) {
+      menu.remove();
+      document.removeEventListener("click", close);
+    }
+  };
+  setTimeout(() => document.addEventListener("click", close), 0);
 }
 
 function scrollToBottom(widget, force = false) {
@@ -815,6 +1035,19 @@ function buildComposerInto(widget, host) {
     }
   });
 
+  // editing indicator (shown while a message is being edited)
+  const chip = el("div", "shoutbox__editing");
+  chip.hidden = true;
+  chip.appendChild(el("span", null, "✎ " + i18n("shoutbox.editing")));
+  const chipCancel = el("button", "shoutbox__editing-cancel");
+  chipCancel.type = "button";
+  chipCancel.textContent = "✕";
+  chipCancel.title = i18n("shoutbox.cancel");
+  chipCancel.addEventListener("click", () => cancelEdit(widget));
+  chip.appendChild(chipCancel);
+  host.appendChild(chip);
+  widget.els.editingChip = chip;
+
   send.addEventListener("click", () => submit(widget));
 }
 
@@ -828,14 +1061,26 @@ function submit(widget) {
   send.disabled = true;
   send.innerHTML = i18n("shoutbox.posting");
 
-  ajax("/shoutbox/messages.json", { type: "POST", data: { message: text } })
-    .then((payload) => {
+  const editingId = editing?.id;
+  const req = editingId
+    ? ajax(`/shoutbox/messages/${editingId}.json`, { type: "PUT", data: { message: text } })
+    : ajax("/shoutbox/messages.json", { type: "POST", data: { message: text } });
+
+  req.then((payload) => {
       ta.value = "";
       ta.dispatchEvent(new Event("input"));
-      if (payload?.message && !messages.has(payload.message.id)) {
-        messages.set(payload.message.id, payload.message);
-        lastSeenId = Math.max(lastSeenId, payload.message.id);
-        widgets.forEach((w) => w.appendRow(payload.message, { isNew: true, forceScroll: true }));
+      editing = null;
+      widgets.forEach((w) => w.setEditingChip?.(false));
+      if (payload?.message) {
+        const m = payload.message;
+        const isNew = !messages.has(m.id);
+        messages.set(m.id, m);
+        if (isNew) {
+          lastSeenId = Math.max(lastSeenId, m.id);
+          widgets.forEach((w) => w.appendRow(m, { isNew: true, forceScroll: true }));
+        } else {
+          widgets.forEach((w) => w.updateRow(m));
+        }
       }
     })
     .catch((err) => {

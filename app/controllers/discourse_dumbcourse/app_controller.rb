@@ -55,8 +55,11 @@ module DiscourseDumbcourse
     end
 
     # The early theme script is inlined in <head>; the CSP allows exactly
-    # that script by its hash.
-    def self.early_script
+    # that script by its hash. When the forum's interface color selector
+    # forces light or dark, a tiny addendum flips the page's palette class
+    # right after the base script, so the app follows the forum's toggle
+    # (the base script alone follows the app's own preference).
+    def self.early_script(forced_mode: nil)
       path = PUBLIC_ROOT.join("dumbcourse-early.js")
       mtime =
         begin
@@ -65,7 +68,7 @@ module DiscourseDumbcourse
           0
         end
       if @early_mtime != mtime
-        @early_script =
+        @early_base =
           (
             begin
               File.read(path)
@@ -73,10 +76,27 @@ module DiscourseDumbcourse
               ""
             end
           ).strip
-        @early_hash = "sha256-#{Digest::SHA256.base64digest(@early_script)}"
         @early_mtime = mtime
+        @early_cache = {}
       end
-      [@early_script, @early_hash]
+      @early_cache ||= {}
+      mode = %w[light dark].include?(forced_mode) ? forced_mode : "system"
+      @early_cache[mode] ||=
+        begin
+          script = @early_base.dup
+          if mode != "system"
+            flip =
+              if mode == "light"
+                'd.classList.add("light");d.classList.remove("dark");'
+              else
+                'd.classList.add("dark");d.classList.remove("light");'
+              end
+            script << "
+;(function(){try{var d=document.documentElement;#{flip}}catch(e){}})();"
+          end
+          hash = "sha256-#{Digest::SHA256.base64digest(script)}"
+          [script, hash]
+        end
     end
 
     # A content hash for cache-busting ?v= on the app files.
@@ -161,7 +181,7 @@ module DiscourseDumbcourse
 
     def page_html
       template = File.read(PUBLIC_ROOT.join("index.html"))
-      early, = self.class.early_script
+      early, = self.class.early_script(forced_mode: Palette.forced_mode(cookies))
       title = SiteSetting.title.to_s
       replacements = {
         "{{TITLE}}" => ERB::Util.html_escape(title),
@@ -489,7 +509,7 @@ module DiscourseDumbcourse
     # theme script, by hash), no framing by other sites, no MIME sniffing.
     # Old browsers ignore CSP; they still get the other headers.
     def security_headers
-      _, early_hash = self.class.early_script
+      _, early_hash = self.class.early_script(forced_mode: Palette.forced_mode(cookies))
       scripts = ["'self'", "'#{early_hash}'"]
       frames = ["'none'"]
       if setting(:discourse_captcha_enabled)

@@ -5,7 +5,7 @@ module DiscourseShoutbox
     requires_plugin "jtech-tools"
 
     before_action :ensure_shoutbox_enabled
-    before_action :ensure_logged_in, only: %i[create destroy]
+    before_action :ensure_logged_in, only: %i[create update destroy like pin]
 
     # HTML requests (GET /shoutbox) serve the Ember app shell — the frontend
     # route-map turns the URL into the full-page board. JSON requests get data.
@@ -26,7 +26,12 @@ module DiscourseShoutbox
             SiteSetting.shoutbox_messages_displayed,
           )
         else
-          ShoutboxMessage.recent.limit(SiteSetting.shoutbox_messages_displayed).reverse
+          ShoutboxMessage.where(pinned: true).recent.limit(
+            SiteSetting.shoutbox_messages_displayed,
+          ).reverse +
+            ShoutboxMessage.where(pinned: false).recent.limit(
+              SiteSetting.shoutbox_messages_displayed,
+            ).reverse
         end
 
       render json: {
@@ -60,6 +65,67 @@ module DiscourseShoutbox
       end
     end
 
+    def update
+      message = ShoutboxMessage.find_by(id: params[:id])
+      raise Discourse::NotFound unless message
+      raise Discourse::InvalidAccess unless message.user_id == current_user.id
+
+      message.message = params[:message].to_s.strip
+      message.edited_at = Time.zone.now
+
+      if message.save
+        serialized = serialize_messages(message)
+        MessageBus.publish(
+          DiscourseShoutbox::MESSAGE_BUS_CHANNEL,
+          { type: "updated", message: serialized },
+        )
+        render json: { message: serialized }
+      else
+        render_json_error(message)
+      end
+    end
+
+    def like
+      message = ShoutboxMessage.find_by(id: params[:id])
+      raise Discourse::NotFound unless message
+
+      like = ShoutboxLike.find_by(user: current_user, shoutbox_message: message)
+      if like
+        like.destroy
+        message.decrement!(:like_count)
+        liked = false
+      else
+        ShoutboxLike.create!(user: current_user, shoutbox_message: message)
+        message.increment!(:like_count)
+        liked = true
+      end
+
+      MessageBus.publish(
+        DiscourseShoutbox::MESSAGE_BUS_CHANNEL,
+        {
+          type: "liked",
+          id: message.id,
+          like_count: message.like_count,
+          liked: liked,
+        },
+      )
+      render json: { like_count: message.like_count, liked: liked }
+    end
+
+    def pin
+      raise Discourse::InvalidAccess unless current_user&.staff?
+
+      message = ShoutboxMessage.find_by(id: params[:id])
+      raise Discourse::NotFound unless message
+
+      message.update!(pinned: !message.pinned)
+      MessageBus.publish(
+        DiscourseShoutbox::MESSAGE_BUS_CHANNEL,
+        { type: "pinned", id: message.id, pinned: message.pinned },
+      )
+      render json: success_json.merge(pinned: message.pinned)
+    end
+
     def destroy
       message = ShoutboxMessage.find_by(id: params[:id])
       raise Discourse::NotFound unless message
@@ -82,6 +148,7 @@ module DiscourseShoutbox
         can_post: current_user.present? && guardian.can_post_shoutbox?,
         max_length: SiteSetting.shoutbox_max_length,
         avatar_template: current_user&.avatar_template,
+        staff: current_user&.staff? || false,
       }
     end
 

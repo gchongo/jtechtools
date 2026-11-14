@@ -68,6 +68,17 @@ module DiscourseDumbcourse
       }
     end
 
+    # The forum's own light/dark state for this reader: the interface color
+    # selector's forced choice when it made one ("light"/"dark"), else
+    # "system" — the browser's preference decides, exactly as on the forum.
+    def self.forced_mode(cookies)
+      case cookies[:forced_color_mode]
+      when "light" then "light"
+      when "dark" then "dark"
+      else "system"
+      end
+    end
+
     # Only hex values reach the page
     def self.declarations(tokens)
       tokens.filter_map { |name, hex| "--#{name}:##{hex.downcase};" if HEX.match?(hex.to_s) }.join
