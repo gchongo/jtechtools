@@ -25,6 +25,7 @@ register_asset "stylesheets/common/shoutbox.scss"
   italic
   heading
   list-ul
+  far-image
   reply
   heart
   far-heart

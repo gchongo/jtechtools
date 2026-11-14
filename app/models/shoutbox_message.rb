@@ -13,9 +13,8 @@ class ShoutboxMessage < ActiveRecord::Base
   has_many :shoutbox_likes, dependent: :delete_all
 
   validates :user_id, presence: true
-  validates :message,
-            presence: true,
-            length: { maximum: -> { SiteSetting.shoutbox_max_length } }
+  validates :message, presence: true
+  validate :message_length_within_limit
   validates :color,
             format: { with: /\A#[0-9a-fA-F]{3,8}\z/, allow_nil: true, allow_blank: true }
 
@@ -28,11 +27,22 @@ class ShoutboxMessage < ActiveRecord::Base
 
   TAG_RE = /#([a-zA-Z0-9_\-]{1,40})/
 
+  # ![alt](upload://… / https://…) image markdown — doesn't count toward the
+  # visible-text length limit
+  IMAGE_MD_RE = /!\[[^\]\n]*\]\([^)\s]+(?:\s[^)]*)?\)/
+
   def self.extract_tags(text)
     text.to_s.scan(TAG_RE).flatten.map(&:downcase).uniq.first(10)
   end
 
   private
+
+  def message_length_within_limit
+    visible = message.to_s.gsub(IMAGE_MD_RE, "")
+    if visible.length > SiteSetting.shoutbox_max_length
+      errors.add(:message, :too_long, count: SiteSetting.shoutbox_max_length)
+    end
+  end
 
   def extract_tags
     self.tags = self.class.extract_tags(message)

@@ -5,7 +5,7 @@ module DiscourseShoutbox
     requires_plugin "jtech-tools"
 
     before_action :ensure_shoutbox_enabled
-    before_action :ensure_logged_in, only: %i[create update destroy like pin]
+    before_action :ensure_logged_in, only: %i[create update destroy like pin upload]
 
     # HTML requests (GET /shoutbox) serve the Ember app shell — the frontend
     # route-map turns the URL into the full-page board. JSON requests get data.
@@ -91,6 +91,39 @@ module DiscourseShoutbox
         render json: { message: serialized }
       else
         render_json_error(message)
+      end
+    end
+
+    # Composer image upload: stores the file through Discourse's own Upload
+    # pipeline (size/type limits, SHA dedup, CDN) and hands back its
+    # upload:// short URL. The client embeds it as standard image markdown —
+    # no shoutbox-specific storage or columns.
+    def upload
+      return render_json_error(I18n.t("shoutbox.not_allowed")) unless guardian.can_post_shoutbox?
+
+      RateLimiter.new(current_user, "shoutbox-upload", 10, 1.minute).performed!
+
+      file = params[:file]
+      return render_json_error(I18n.t("shoutbox.upload_failed")) if file.blank?
+
+      upload =
+        UploadCreator.new(
+          file.tempfile,
+          file.original_filename,
+          type: "shoutbox",
+          for_site_setting: true,
+        ).create
+
+      if upload.errors.empty?
+        render json: {
+          short_url: upload.short_url,
+          url: upload.url,
+          width: upload.width,
+          height: upload.height,
+          original_filename: upload.original_filename,
+        }
+      else
+        render_json_error(message: upload.errors.full_messages.join("\n"))
       end
     end
 

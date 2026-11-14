@@ -291,6 +291,21 @@
   background: var(--shoutbox-surface);
 }
 
+// The theme's .jt-card__foot is a horizontal stats strip — right for a card's
+// like/view row, wrong for the composer foot (it shrinks the composer row to
+// its content width, so the Post button never reaches the right edge).
+// The composer foot is the one directly under .shoutbox; card stats feet live
+// inside .shoutbox__item and keep the theme layout. (0,2,0) beats the theme.
+.shoutbox > .shoutbox__foot.jt-card__foot {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.shoutbox__foot .shoutbox__composer-row {
+  flex: 1 1 auto;
+  width: 100%;
+}
+
 .shoutbox__composer-row {
   display: flex;
   align-items: flex-start;
@@ -397,6 +412,9 @@
   align-items: center;
   gap: 0.6em;
   flex-shrink: 0;
+  // belt-and-braces: keep count + Post pinned to the right even if a theme
+  // rule ever changes the bar's justify-content
+  margin-left: auto;
 }
 
 .shoutbox__send {
@@ -671,12 +689,10 @@
   margin: 0;
 }
 
-// De-card the page variant: a bordered timeline column, not a panel.
+// De-card the page variant: no frame at all — just the feed on the page.
 .shoutbox--page {
+  border: none;
   border-radius: 0;
-  border-top: none;
-  border-bottom: none;
-  border-inline: 1px solid var(--shoutbox-border);
   background: var(--secondary);
 }
 
@@ -951,6 +967,16 @@
   border: none;
 }
 
+// row stats share .shoutbox__foot with the composer — strip the composer's
+// surface fill/hairlines so the foot inherits the card background instead of
+// painting a darker strip over it (0,3,0 also out-ranks the composer's
+// .shoutbox--page variants)
+.shoutbox__item .shoutbox__foot.jt-card__foot {
+  background: transparent;
+  border-top: none;
+  border-bottom: none;
+}
+
 // counts after the stat icons: smaller and quieter than the icons
 .shoutbox__foot .shoutbox__action-label,
 .shoutbox__foot .number {
@@ -1167,6 +1193,32 @@
 
 .shoutbox__line {
   min-height: 0.5em;
+}
+
+// composer image upload
+.shoutbox__file-input {
+  display: none;
+}
+
+.shoutbox__composer-btn.is-busy {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+// message images: memos-style rounded block, capped height, click to open
+.shoutbox__image-link {
+  display: inline-block;
+  max-width: 100%;
+  line-height: 0;
+}
+
+.shoutbox__image {
+  display: block;
+  max-width: 100%;
+  max-height: 20em;
+  border-radius: var(--jt-radius-sm, 0.5em);
+  border: 1px solid var(--jt-border, var(--primary-low));
+  cursor: zoom-in;
 }
 
 .shoutbox__code {

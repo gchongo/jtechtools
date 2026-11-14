@@ -1467,3 +1467,4 @@ en:
         A moderator has lifted slow mode on your account. You can post as usual again.
   shoutbox:
     not_allowed: "You are not allowed to post messages here."
+    upload_failed: "Image upload failed. Try a different file."

@@ -394,6 +394,21 @@ function renderRichText(parent, text) {
   });
 }
 
+// Resolve an image markdown URL to a safe src: Discourse upload:// short
+// URLs become /uploads/short-url/… (redirects to the stored file); only
+// http(s) and same-origin relative URLs are allowed — anything else (e.g.
+// javascript:) returns null and the markdown renders as plain text.
+function imageSrcFor(raw) {
+  const url = String(raw || "");
+  if (url.startsWith("upload://")) {
+    return "/uploads/short-url/" + url.slice("upload://".length);
+  }
+  if (/^https?:\/\//i.test(url) || url.startsWith("/")) {
+    return url;
+  }
+  return null;
+}
+
 // Line-level markdown: headings (# ## ###), bullet lists (- ), paragraphs.
 function renderLines(parent, text) {
   const lines = text.split("\n");
@@ -407,6 +422,7 @@ function renderLines(parent, text) {
   lines.forEach((line) => {
     const h = line.match(/^(#{1,3})\s+(.+)$/);
     const li = line.match(/^[-*]\s+(.+)$/);
+    const img = line.match(/^!\[([^\]\n]*)\]\(([^)\s]+)[^)]*\)$/);
     if (h) {
       flushList();
       const hd = el(
@@ -423,6 +439,19 @@ function renderLines(parent, text) {
       item.appendChild(document.createTextNode("\u2022 "));
       renderInline(item, li[1]);
       list.appendChild(item);
+    } else if (img && imageSrcFor(img[2])) {
+      flushList();
+      const src = imageSrcFor(img[2]);
+      const a = el("a", "shoutbox__image-link");
+      a.href = src;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer nofollow ugc";
+      const im = el("img", "shoutbox__image");
+      im.src = src;
+      im.alt = img[1];
+      im.loading = "lazy";
+      a.appendChild(im);
+      parent.appendChild(a);
     } else {
       flushList();
       const p = el("div", "shoutbox__line");
@@ -1174,6 +1203,50 @@ function renderFoot(widget) {
   icons.appendChild(fmtBtn("heading", "shoutbox.heading", (t) => prefixLine(t, "## ")));
   icons.appendChild(fmtBtn("list-ul", "shoutbox.list", (t) => prefixLine(t, "- ")));
 
+  const fileInput = el("input", "shoutbox__file-input");
+  fileInput.type = "file";
+  fileInput.accept = "image/*";
+  fileInput.hidden = true;
+  icons.appendChild(fileInput);
+
+  const imageBtn = fmtBtn("far-image", "shoutbox.image", () => fileInput.click());
+  icons.appendChild(imageBtn);
+
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files && fileInput.files[0];
+    fileInput.value = "";
+    if (!file) {
+      return;
+    }
+    if (imageBtn.disabled) {
+      return;
+    }
+    imageBtn.disabled = true;
+    imageBtn.classList.add("is-busy");
+    count.textContent = i18n("shoutbox.uploading");
+    const fd = new FormData();
+    fd.append("file", file, file.name);
+    ajax("/shoutbox/uploads.json", {
+      type: "POST",
+      data: fd,
+      processData: false,
+      contentType: false,
+    })
+      .then((data) => {
+        const alt = file.name.replace(/\.[^.]+$/, "").slice(0, 60) || "image";
+        insertAtCursor(ta, `\n![${alt}](${data.short_url || data.url})\n`);
+        ta.dispatchEvent(new Event("input", { bubbles: true }));
+      })
+      .catch(() => {
+        count.textContent = i18n("shoutbox.upload_failed");
+        setTimeout(updateCount, 2500);
+      })
+      .finally(() => {
+        imageBtn.disabled = false;
+        imageBtn.classList.remove("is-busy");
+      });
+  });
+
   const emojiBtn = el("button", "shoutbox__composer-btn shoutbox__emoji-btn");
   emojiBtn.type = "button";
   emojiBtn.title = i18n("shoutbox.emoji_picker");
@@ -1194,12 +1267,14 @@ function renderFoot(widget) {
   const count = el("span", "shoutbox__count");
   const updateCount = () => {
     // NB: don't name the option "count" — that makes Discourse's i18n look
-    // for pluralized key variants (shoutbox.count.one/other).
+    // for pluralized key variants (shoutbox.count.one/other). Image markdown
+    // doesn't count toward the limit (the server strips it the same way).
+    const visible = ta.value.replace(/!\[[^\]\n]*\]\([^)\s]+(?:\s[^)]*)?\)/g, "");
     count.textContent = i18n("shoutbox.count", {
-      current: ta.value.length,
+      current: visible.length,
       max: ta.maxLength,
     });
-    send.disabled = ta.value.trim().length === 0;
+    send.disabled = visible.trim().length === 0;
   };
   actions.appendChild(count);
 
