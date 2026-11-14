@@ -558,11 +558,16 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
         topLevel.push(m);
       }
     }
+    // newest first (memos/X style); pinned float to the top
+    topLevel.sort(
+      (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.id - a.id,
+    );
     for (const m of topLevel) {
       const animate = m.id > cutoff;
       widget.els.list.appendChild(buildRow(widget, m, { animate }));
       last = m;
-      for (const r of repliesByParent.get(m.id) || []) {
+      // replies stay chronological under their parent
+      for (const r of (repliesByParent.get(m.id) || []).sort((x, y) => x.id - y.id)) {
         widget.els.list.appendChild(buildRow(widget, r, { animate }));
         last = r;
       }
@@ -573,16 +578,19 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
     showEmptyStateIfNeeded(widget);
     renderFoot(widget);
     renderSide(widget);
-    scrollToBottom(widget);
+    scrollToTop(widget);
   };
 
   widget.appendRow = (m, { isNew = false, forceScroll = false } = {}) => {
     hideEmptyState(widget);
     const animate = isNew && m.id > lastSeenId;
     lastSeenId = Math.max(lastSeenId, m.id);
-    widget.els.list.appendChild(buildRow(widget, m, { animate }));
+    // newest-first feed: new top-level rows go to the very top
+    widget.els.list.insertBefore(buildRow(widget, m, { animate }), widget.els.list.firstChild);
     renderSide(widget);
-    scrollToBottom(widget, forceScroll);
+    if (isNew || forceScroll) {
+      scrollToTop(widget);
+    }
   };
 
   widget.insertReplyRow = (m) => {
@@ -657,6 +665,35 @@ const insertAtCursor = (textarea, text) => {
   const pos = start + text.length;
   textarea.setSelectionRange(pos, pos);
   textarea.focus();
+};
+
+// wrap the selected text with markers (bold / italic / code); empty selection
+// inserts the markers and puts the cursor between them
+const wrapSelection = (textarea, before, after = before) => {
+  const start = textarea.selectionStart ?? textarea.value.length;
+  const end = textarea.selectionEnd ?? textarea.value.length;
+  const sel = textarea.value.slice(start, end);
+  textarea.value =
+    textarea.value.slice(0, start) + before + sel + after + textarea.value.slice(end);
+  const selStart = start + before.length;
+  const selEnd = selStart + sel.length;
+  textarea.setSelectionRange(selStart, selEnd);
+  textarea.focus();
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
+};
+
+// prefix each selected line (headings "# ", bullets "- ")
+const prefixLine = (textarea, prefix) => {
+  const start = textarea.selectionStart ?? textarea.value.length;
+  const end = textarea.selectionEnd ?? textarea.value.length;
+  const lineStart = textarea.value.lastIndexOf("\n", start - 1) + 1;
+  const lines = textarea.value.slice(lineStart, end).split("\n");
+  const replaced = lines.map((l) => (l.startsWith(prefix) ? l : prefix + l)).join("\n");
+  textarea.value = textarea.value.slice(0, lineStart) + replaced + textarea.value.slice(end);
+  const selEnd = lineStart + replaced.length;
+  textarea.setSelectionRange(lineStart, selEnd);
+  textarea.focus();
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
 };
 
 const el = (tag, cls, text) => {
@@ -978,13 +1015,10 @@ function toggleCommentBox(widget, m, row) {
   });
 }
 
-function scrollToBottom(widget, force = false) {
+function scrollToTop(widget) {
   const list = widget.els.list;
   requestAnimationFrame(() => {
-    const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
-    if (force || nearBottom) {
-      list.scrollTop = list.scrollHeight;
-    }
+    list.scrollTop = 0;
   });
 }
 
@@ -1125,6 +1159,20 @@ function renderFoot(widget) {
 
   const bar = el("div", "shoutbox__composer-bar");
   const icons = el("div", "shoutbox__composer-icons");
+
+  const fmtBtn = (icon, title, onClick) => {
+    const b = el("button", "shoutbox__composer-btn");
+    b.type = "button";
+    b.title = i18n(title);
+    b.setAttribute("aria-label", i18n(title));
+    b.innerHTML = iconHTML(icon);
+    b.addEventListener("click", () => onClick(ta));
+    return b;
+  };
+  icons.appendChild(fmtBtn("bold", "shoutbox.bold", (t) => wrapSelection(t, "**")));
+  icons.appendChild(fmtBtn("italic", "shoutbox.italic", (t) => wrapSelection(t, "*")));
+  icons.appendChild(fmtBtn("heading", "shoutbox.heading", (t) => prefixLine(t, "## ")));
+  icons.appendChild(fmtBtn("list-ul", "shoutbox.list", (t) => prefixLine(t, "- ")));
 
   const emojiBtn = el("button", "shoutbox__composer-btn shoutbox__emoji-btn");
   emojiBtn.type = "button";
@@ -1269,7 +1317,10 @@ function renderFoot(widget) {
       .catch(closeMention);
   };
 
-  ta.addEventListener("input", refreshMentions);
+  ta.addEventListener("input", () => {
+    updateCount();
+    refreshMentions();
+  });
   ta.addEventListener("click", closeMention);
   ta.addEventListener("blur", () => setTimeout(closeMention, 150));
   ta.addEventListener("keydown", (event) => {
