@@ -7,7 +7,10 @@ export default class ShoutboxDetail extends Component {
   widget = null;
 
   mount = (element) => {
-    this.widget = mountShoutboxDetail(element, { id: this.args.id });
+    // read the id straight from the URL — route-model plumbing through gjs
+    // template args proved unreliable (arrived undefined -> NaN.json)
+    const id = Number(window.location.pathname.match(/\/shoutbox\/m\/(\d+)/)?.[1]);
+    this.widget = mountShoutboxDetail(element, { id });
   };
 
   unmount = () => {

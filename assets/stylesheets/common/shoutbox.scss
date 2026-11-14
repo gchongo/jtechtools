@@ -1033,6 +1033,12 @@
   gap: 0.4em;
   border-top: 1px solid var(--shoutbox-border);
   padding-top: 0.6em;
+
+  // display:flex would override the hidden attribute (anon viewers / failed
+  // loads must not see the comment box)
+  &[hidden] {
+    display: none;
+  }
 }
 
 .shoutbox__comment-input {
@@ -1582,6 +1588,11 @@
   padding: 0;
   background: none;
   border: none;
+
+  // display:grid would override the hidden attribute — keep it honest
+  &[hidden] {
+    display: none;
+  }
 
   &[data-count="1"] {
     grid-template-columns: 1fr;

@@ -2060,8 +2060,18 @@ function buildDetailReply(m) {
 
 export function mountShoutboxDetail(rootEl, { id }) {
   const state = { destroyed: false };
+  id = Number(id);
 
   const wrap = el("div", "shoutbox-detail");
+  rootEl.appendChild(wrap);
+
+  // invalid/missing id (bad URL) — render the failure state, skip the fetch
+  if (!Number.isFinite(id) || id <= 0) {
+    const failCard = el("div", "shoutbox__item jt-card shoutbox-detail__card");
+    failCard.appendChild(el("li", "shoutbox__msg", i18n("shoutbox.load_failed")));
+    wrap.appendChild(failCard);
+    return { rootEl, destroy: () => (state.destroyed = true) };
+  }
   rootEl.appendChild(wrap);
 
   const back = el("a", "shoutbox-detail__back");
