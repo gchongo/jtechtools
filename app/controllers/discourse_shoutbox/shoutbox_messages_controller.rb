@@ -106,24 +106,34 @@ module DiscourseShoutbox
       file = params[:file]
       return render_json_error(I18n.t("shoutbox.upload_failed")) if file.blank?
 
-      upload =
-        UploadCreator.new(
-          file.tempfile,
-          file.original_filename,
-          type: "shoutbox",
-          for_site_setting: true,
-        ).create
+      begin
+        upload =
+          UploadCreator.new(
+            file.tempfile,
+            file.original_filename,
+            type: "shoutbox",
+            for_site_setting: true,
+          ).create_for(current_user.id)
 
-      if upload.errors.empty?
-        render json: {
-          short_url: upload.short_url,
-          url: upload.url,
-          width: upload.width,
-          height: upload.height,
-          original_filename: upload.original_filename,
-        }
-      else
-        render_json_error(upload.errors.full_messages.join("\n"))
+        if upload.errors.empty?
+          render json: {
+            short_url: upload.short_url,
+            url: upload.url,
+            width: upload.width,
+            height: upload.height,
+            original_filename: upload.original_filename,
+          }
+        else
+          render_json_error(upload.errors.full_messages.join("\n"))
+        end
+      rescue => e
+        # Logster doesn't write production_errors.log on this setup — land the
+        # backtrace in production.log so upload failures are diagnosable.
+        Rails.logger.error(
+          "Shoutbox upload failed: #{e.class}: #{e.message}\n" +
+            e.backtrace.first(15).join("\n"),
+        )
+        render_json_error(I18n.t("shoutbox.upload_failed"))
       end
     end
 
