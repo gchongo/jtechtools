@@ -71,6 +71,28 @@ const scanMounts = (siteSettings) => {
 
 export default apiInitializer("1.8.0", (api) => {
   const siteSettings = api.container.lookup("service:site-settings");
+
+  // user-menu render directors for the shoutbox notification types
+  const registerShoutboxNotification = (typeName, icon) => {
+    if (!api.registerNotificationTypeRenderer) {
+      return;
+    }
+    api.registerNotificationTypeRenderer(typeName, (NotificationTypeBase) => {
+      return class extends NotificationTypeBase {
+        icon = icon;
+        get linkHref() {
+          return this.notification.data.url;
+        }
+        get description() {
+          return this.notification.data.topic_title;
+        }
+      };
+    });
+  };
+  registerShoutboxNotification("shoutbox_reply", "far-comment");
+  registerShoutboxNotification("shoutbox_like", "far-heart");
+  registerShoutboxNotification("shoutbox_mention", "far-comment");
+
   if (!siteSettings.jtech_enabled || !siteSettings.shoutbox_enabled) {
     return;
   }

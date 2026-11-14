@@ -29,6 +29,7 @@ let lastSeenId = 0;
 let pollTimer = null;
 let permalinkHandled = false;
 const viewedInSession = new Set();
+let tagFilter = null;
 
 const maxId = () => {
   let max = lastSeenId;
@@ -46,7 +47,10 @@ const catchUp = () => {
 };
 
 const loadMessages = (afterId = 0) => {
-  const qs = afterId > 0 ? `?after_id=${afterId}` : "";
+  let qs = afterId > 0 ? `?after_id=${afterId}` : "";
+  if (tagFilter) {
+    qs += (qs ? "&" : "?") + `tag=${encodeURIComponent(tagFilter)}`;
+  }
   return ajax(`/shoutbox/messages.json${qs}`)
     .then((payload) => {
       viewer = payload.viewer || viewer;
@@ -297,10 +301,31 @@ const appendTextWithMentions = (parent, text) => {
       a.textContent = part;
       parent.appendChild(a);
     } else {
-      parent.appendChild(document.createTextNode(part));
+      appendTextWithTag(parent, part);
     }
   });
 };
+
+const TAG_SPLIT = /(#[a-zA-Z0-9_\-]+)/g;
+
+function appendTextWithTag(parent, text) {
+  text.split(TAG_SPLIT).forEach((part) => {
+    if (!part) {
+      return;
+    }
+    const m = part.match(/^#([a-zA-Z0-9_\-]+)$/);
+    if (m) {
+      const a = makeLink(
+        `/shoutbox?tag=${encodeURIComponent(m[1].toLowerCase())}`,
+        "shoutbox__tag",
+      );
+      a.textContent = part;
+      parent.appendChild(a);
+    } else {
+      parent.appendChild(document.createTextNode(part));
+    }
+  });
+}
 
 const appendTextWithEmoji = (parent, text) => {
   text.split(EMOJI_SPLIT).forEach((part) => {
@@ -390,11 +415,20 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
   // card.
   let mount;
   if (variant === "page") {
+    tagFilter = new URLSearchParams(window.location.search).get("tag");
+    tagListPromise = null;
     rootEl.classList.add("shoutbox-page-grid");
     mount = el("div", "shoutbox shoutbox--page");
     rootEl.appendChild(mount);
     widget.els.side = el("aside", "shoutbox-side");
     rootEl.appendChild(widget.els.side);
+
+    const tagsCard = el("div", "shoutbox-side__card shoutbox-side__card--tags");
+    tagsCard.hidden = true;
+    tagsCard.appendChild(el("div", "shoutbox-side__title", i18n("shoutbox.side_tags")));
+    widget.els.tagsList = el("div", "shoutbox-side__tag-list");
+    tagsCard.appendChild(widget.els.tagsList);
+    widget.els.tagsCard = tagsCard;
   } else {
     rootEl.classList.add("shoutbox", "shoutbox--panel");
     mount = rootEl;
@@ -548,6 +582,10 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
   widgets.add(widget);
   startShared();
 
+  if (widget.variant === "page") {
+    fillTagsCard(widget);
+  }
+
   if (loaded) {
     widget.refresh();
   } else {
@@ -578,9 +616,16 @@ function buildRow(widget, m, { animate = false, isReply = false } = {}) {
     li.classList.add("shoutbox__item--new");
   }
 
-  // meta: author + handle, pinned flag right
+  // meta: avatar + author + handle, flags (pin / row menu) right
   const meta = el("div", "jt-card__meta");
   const author = el("span", "shoutbox__author");
+  if (m.user?.avatar_template) {
+    const av = el("img", "shoutbox__author-avatar");
+    av.src = avatarSrc(m, 48);
+    av.alt = "";
+    av.loading = "lazy";
+    author.appendChild(av);
+  }
   const name = makeLink(userHref(m), "shoutbox__name");
   name.textContent = esc(m.user?.name || m.user?.username);
   author.appendChild(name);
@@ -590,8 +635,19 @@ function buildRow(widget, m, { animate = false, isReply = false } = {}) {
   meta.appendChild(author);
   const flags = el("span", "jt-card__flags");
   if (m.pinned) {
+
     flags.appendChild(el("span", "jt-pill", `\u{1F4CC} ${i18n("shoutbox.pinned_label")}`));
   }
+  const menuBtn = el("button", "jt-card__peek btn btn-flat no-text");
+  menuBtn.type = "button";
+  menuBtn.innerHTML = iconHTML("ellipsis-vertical");
+  menuBtn.title = i18n("shoutbox.menu");
+  menuBtn.setAttribute("aria-label", i18n("shoutbox.menu"));
+  menuBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openRowMenu(widget, m, li);
+  });
+  flags.appendChild(menuBtn);
   meta.appendChild(flags);
   li.appendChild(meta);
 
@@ -605,21 +661,8 @@ function buildRow(widget, m, { animate = false, isReply = false } = {}) {
   body.appendChild(text);
   li.appendChild(body);
 
-  // foot: avatar + stats (comment / like / views / time) + row menu
+  // foot: stats (comment / like / views / time)
   const foot = el("div", "jt-card__foot");
-  const people = el("span", "jt-card__people");
-  if (m.user?.avatar_template) {
-    const link = el("a", "shoutbox__people-link");
-    link.href = userHref(m);
-    const avatar = el("img", "avatar");
-    avatar.src = avatarSrc(m, 24);
-    avatar.alt = "";
-    avatar.loading = "lazy";
-    link.appendChild(avatar);
-    people.appendChild(link);
-  }
-  foot.appendChild(people);
-
   const stats = el("span", "jt-card__stats");
 
   const commentBtn = el("button", "jt-card__stat shoutbox__stat-btn");
@@ -655,17 +698,6 @@ function buildRow(widget, m, { animate = false, isReply = false } = {}) {
   time.title = date.toLocaleString();
   activity.appendChild(time);
   stats.appendChild(activity);
-
-  const menuBtn = el("button", "jt-card__peek btn btn-flat no-text");
-  menuBtn.type = "button";
-  menuBtn.innerHTML = iconHTML("ellipsis-vertical");
-  menuBtn.title = i18n("shoutbox.menu");
-  menuBtn.setAttribute("aria-label", i18n("shoutbox.menu"));
-  menuBtn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    openRowMenu(widget, m, li);
-  });
-  stats.appendChild(menuBtn);
 
   foot.appendChild(stats);
   li.appendChild(foot);
@@ -975,7 +1007,46 @@ function renderSide(widget) {
     el("p", "shoutbox-side__text", i18n("shoutbox.side_about", { n: messages.size })),
   );
 
-  side.replaceChildren(active, about);
+  if (widget.els.tagsCard) {
+    side.replaceChildren(active, about, widget.els.tagsCard);
+  } else {
+    side.replaceChildren(active, about);
+  }
+}
+
+let tagListPromise = null;
+function loadTagList() {
+  tagListPromise ||= ajax("/shoutbox/tags.json")
+    .then((d) => d.tags || [])
+    .catch(() => []);
+  return tagListPromise;
+}
+
+function fillTagsCard(widget) {
+  const card = widget.els.tagsCard;
+  if (!card) {
+    return;
+  }
+  loadTagList().then((tags) => {
+    if (widget.destroyed) {
+      return;
+    }
+    card.hidden = tags.length === 0;
+    const list = widget.els.tagsList;
+    if (!list) {
+      return;
+    }
+    list.replaceChildren();
+    tags.forEach(({ name, count }) => {
+      const a = makeLink(
+        `/shoutbox?tag=${encodeURIComponent(name)}`,
+        "shoutbox-side__tag",
+      );
+      a.textContent = `#${name}`;
+      a.appendChild(el("span", "shoutbox-side__count", String(count)));
+      list.appendChild(a);
+    });
+  });
 }
 
 function showEmptyStateIfNeeded(widget) {

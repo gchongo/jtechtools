@@ -22,6 +22,22 @@ class ShoutboxMessage < ActiveRecord::Base
   # Newest first; the controller reverses for display.
   scope :recent, -> { order(id: :desc) }
 
+  # #tags are parsed out of the message text itself (memos-style): the text
+  # keeps them, the column powers the tag filter and the tags side card.
+  before_validation :extract_tags
+
+  TAG_RE = /#([a-zA-Z0-9_\-]{1,40})/
+
+  def self.extract_tags(text)
+    text.to_s.scan(TAG_RE).flatten.map(&:downcase).uniq.first(10)
+  end
+
+  private
+
+  def extract_tags
+    self.tags = self.class.extract_tags(message)
+  end
+
   # Keeps the table bounded: removes everything below the newest N messages.
   def self.trim_overflow!
     max = SiteSetting.shoutbox_max_stored

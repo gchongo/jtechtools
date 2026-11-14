@@ -20,18 +20,27 @@ module DiscourseShoutbox
     def list
       return raise Discourse::InvalidAccess if current_user.blank? && !SiteSetting.shoutbox_anonymous_view
 
+      @tag_filter = params[:tag].to_s.presence
+
+      base =
+        if @tag_filter
+          ShoutboxMessage.where("? = ANY (tags)", @tag_filter)
+        else
+          ShoutboxMessage.all
+        end
+
       messages =
         if (after_id = params[:after_id].to_i).positive?
-          ShoutboxMessage.where("id > ?", after_id).order(:id).limit(
+          base.where("id > ?", after_id).order(:id).limit(
             SiteSetting.shoutbox_messages_displayed,
           )
         else
           top =
             (
-              ShoutboxMessage.where(pinned: true).recent.limit(
+              base.where(pinned: true).recent.limit(
                 SiteSetting.shoutbox_messages_displayed,
               ).reverse +
-                ShoutboxMessage.where(pinned: false).recent.limit(
+                base.where(pinned: false).recent.limit(
                   SiteSetting.shoutbox_messages_displayed,
                 ).reverse
             ).select { |m| m.reply_to_id.nil? }
@@ -65,6 +74,20 @@ module DiscourseShoutbox
           { type: "created", message: serialized },
         )
         ShoutboxMessage.trim_overflow!
+
+        # notifications: parent author for replies, @mentions otherwise
+        notified_ids = [current_user.id]
+        if message.reply_to_id.present?
+          DiscourseShoutbox.notify!(message.reply_to.user, :shoutbox_reply, current_user, message)
+          notified_ids << message.reply_to.user_id
+        end
+        message.message.scan(/@([a-zA-Z0-9_\-.]+)/).flatten.map(&:downcase).uniq.each do |name|
+          mentioned = User.find_by(username_lower: name)
+          next if mentioned.nil? || notified_ids.include?(mentioned.id)
+          DiscourseShoutbox.notify!(mentioned, :shoutbox_mention, current_user, message)
+          notified_ids << mentioned.id
+        end
+
         render json: { message: serialized }
       else
         render_json_error(message)
@@ -115,6 +138,9 @@ module DiscourseShoutbox
           liked: liked,
         },
       )
+      if liked
+        DiscourseShoutbox.notify!(message.user, :shoutbox_like, current_user, message)
+      end
       render json: { like_count: message.like_count, liked: liked }
     end
 
@@ -140,6 +166,17 @@ module DiscourseShoutbox
 
       message.increment!(:views)
       render json: success_json.merge(views: message.views)
+    end
+
+    def tags
+      rows =
+        ShoutboxMessage
+          .joins("CROSS JOIN unnest(tags) AS tag")
+          .group("tag")
+          .select("tag, COUNT(*) AS count")
+          .order("count DESC")
+          .limit(30)
+      render json: { tags: rows.map { |r| { name: r.tag, count: r.count } } }
     end
 
     def destroy

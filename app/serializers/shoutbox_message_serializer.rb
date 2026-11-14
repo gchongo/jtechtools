@@ -3,7 +3,7 @@
 class ShoutboxMessageSerializer < ::ApplicationSerializer
   attributes :id, :message, :color, :created_at, :can_delete, :can_edit,
              :like_count, :liked, :edited, :pinned, :views,
-             :reply_to_id, :reply_count, :reply_to_username
+             :reply_to_id, :reply_count, :reply_to_username, :tags
 
   has_one :user, serializer: ::BasicUserSerializer, embed: :objects
 

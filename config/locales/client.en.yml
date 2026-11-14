@@ -41,6 +41,7 @@ en:
       external_link: "External link"
       topic_link: "Open topic"
       side_active: "Most active"
+      side_tags: "Tags"
       side_count: "{{n}} messages"
       side_about: "{{n}} messages so far. Short thoughts from the community — be kind, have fun."
     disteleplus:

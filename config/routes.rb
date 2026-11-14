@@ -274,6 +274,7 @@ Discourse::Application.routes.append do
     post "/messages/:id/like" => "shoutbox_messages#like", defaults: { format: :json }
     post "/messages/:id/pin" => "shoutbox_messages#pin", defaults: { format: :json }
     post "/messages/:id/view" => "shoutbox_messages#view", defaults: { format: :json }
+    get "/tags" => "shoutbox_messages#tags", defaults: { format: :json }
     delete "/messages/:id" => "shoutbox_messages#destroy", defaults: { format: :json }
   end
 end

@@ -38,12 +38,34 @@ register_asset "stylesheets/common/shoutbox.scss"
 module ::DiscourseShoutbox
   MESSAGE_BUS_CHANNEL = "/shoutbox"
 
+  # Notification type ids: well above core's, unique among the plugins on
+  # this install. The client registers render directors for these names.
+  def self.notify!(user, type, acting_user, message)
+    return if user.nil? || acting_user.nil? || user.id == acting_user.id
+    Notification.create!(
+      user: user,
+      notification_type: Notification.types[type],
+      data: {
+        display_username: acting_user.username,
+        topic_title: message.message.to_s[0, 120],
+        url: "/shoutbox#m-#{message.id}",
+      }.to_json,
+    )
+  rescue StandardError => e
+    Rails.logger.warn("[jtech-tools shoutbox] notification failed: #{e}")
+  end
+
   def self.enabled?
     SiteSetting.jtech_enabled && SiteSetting.shoutbox_enabled
   end
 end
 
 after_initialize do
+  # notification type ids (client renderers: initializers/shoutbox.js)
+  Notification.types[:shoutbox_reply] = 1101
+  Notification.types[:shoutbox_like] = 1102
+  Notification.types[:shoutbox_mention] = 1103
+
   add_to_class(:guardian, :can_post_shoutbox?) do
     authenticated? && user.trust_level.to_i >= SiteSetting.shoutbox_min_trust_level
   end
