@@ -897,6 +897,144 @@
   padding: 0.6em;
 }
 
+// ── detail view (comments live behind the feed's comment count) ─────────────
+.shoutbox__detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1em;
+}
+
+.shoutbox__detail {
+  width: 100%;
+  max-width: 38em;
+  max-height: 85dvh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75em;
+  background: var(--jt-surface-raised, var(--secondary));
+  border: 1px solid var(--jt-border, var(--primary-low));
+  border-radius: 1em;
+  padding: 1em;
+  overflow: hidden;
+}
+
+.shoutbox__detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.shoutbox__detail-title {
+  font-weight: 800;
+  font-size: 1.05em;
+  color: var(--primary);
+}
+
+.shoutbox__detail-close {
+  appearance: none;
+  border: none;
+  width: 1.9em;
+  height: 1.9em;
+  border-radius: 999px;
+  background: var(--jt-surface-sunken, var(--primary-very-low));
+  color: var(--shoutbox-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+
+  &:hover {
+    color: var(--shoutbox-text);
+    background: var(--shoutbox-hover);
+  }
+}
+
+// the parent card inside the modal: same jt-card look, no shadow theater
+.shoutbox__detail .shoutbox__item {
+  margin: 0;
+}
+
+.shoutbox__detail-list {
+  flex: 1 1 auto;
+  min-height: 3em;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9em;
+  padding: 0.25em 0.1em;
+}
+
+.shoutbox__detail-reply {
+  display: flex;
+  gap: 0.6em;
+}
+
+.shoutbox__detail-reply-avatar {
+  width: 2em;
+  height: 2em;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.shoutbox__detail-reply-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.shoutbox__detail-reply-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  font-size: var(--font-down-2);
+}
+
+.shoutbox__detail-reply-name {
+  font-weight: 700;
+  color: var(--shoutbox-text);
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.shoutbox__detail-reply-handle {
+  color: var(--shoutbox-muted);
+}
+
+.shoutbox__detail-reply-time {
+  margin-left: auto;
+  color: var(--shoutbox-muted);
+}
+
+.shoutbox__detail-reply-text {
+  color: var(--shoutbox-text);
+  font-size: var(--font-0);
+  line-height: var(--line-height-medium);
+  overflow-wrap: anywhere;
+}
+
+.shoutbox__detail-empty {
+  color: var(--shoutbox-muted);
+  font-size: var(--font-down-1);
+  padding: 0.5em 0;
+}
+
+.shoutbox__detail-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  border-top: 1px solid var(--shoutbox-border);
+  padding-top: 0.6em;
+}
+
 .shoutbox__comment-input {
   resize: none;
   min-height: 2.4em;
@@ -1393,6 +1531,34 @@
 
 .shoutbox__line {
   min-height: 0.5em;
+}
+
+// memos-style long-content clamp: 4 lines in the feed, more/less toggle
+.shoutbox__text.shoutbox__clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+
+  &.is-expanded {
+    display: block;
+    -webkit-line-clamp: unset;
+  }
+}
+
+.shoutbox__more {
+  align-self: flex-start;
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0.15em 0 0;
+  color: var(--shoutbox-accent);
+  font-size: var(--font-down-1);
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
 }
 
 // composer image upload

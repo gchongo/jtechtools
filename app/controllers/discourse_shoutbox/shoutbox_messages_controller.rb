@@ -17,6 +17,22 @@ module DiscourseShoutbox
       end
     end
 
+    # Single message + its replies — powers the /shoutbox/m/:id detail page.
+    def show
+      return raise Discourse::InvalidAccess if current_user.blank? && !SiteSetting.shoutbox_anonymous_view
+
+      message = ShoutboxMessage.find_by(id: params[:id])
+      raise Discourse::NotFound unless message
+
+      replies = ShoutboxMessage.where(reply_to_id: message.id).order(:id)
+
+      render json: {
+        message: serialize_messages(message),
+        replies: serialize_messages(replies),
+        viewer: viewer_payload,
+      }
+    end
+
     def list
       return raise Discourse::InvalidAccess if current_user.blank? && !SiteSetting.shoutbox_anonymous_view
 

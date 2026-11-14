@@ -269,6 +269,7 @@ Discourse::Application.routes.append do
   scope "/shoutbox", module: "discourse_shoutbox", as: :shoutbox do
     get "/" => "shoutbox_messages#index"
     get "/messages" => "shoutbox_messages#index", defaults: { format: :json }
+    get "/messages/:id" => "shoutbox_messages#show", defaults: { format: :json }
     post "/messages" => "shoutbox_messages#create", defaults: { format: :json }
     post "/uploads" => "shoutbox_messages#upload", defaults: { format: :json }
     put "/messages/:id" => "shoutbox_messages#update", defaults: { format: :json }

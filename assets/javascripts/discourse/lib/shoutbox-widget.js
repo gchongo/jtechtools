@@ -128,9 +128,7 @@ const startShared = () => {
           }
           messages.set(m.id, m);
           lastSeenId = Math.max(lastSeenId, m.id);
-          if (m.reply_to_id && messages.has(m.reply_to_id)) {
-            widgets.forEach((w) => w.insertReplyRow(m));
-          } else {
+          if (!m.reply_to_id) {
             widgets.forEach((w) => w.appendRow(m, { isNew: true }));
           }
         } else if (data?.type === "updated" && data.message) {
@@ -642,15 +640,11 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
     // initial load (null) never animates; catch-up animates what's new
     const cutoff = animateFromId === null ? Infinity : animateFromId;
     widget.els.list.replaceChildren();
-    let last = null;
+    // memos-style feed: only top-level messages render here — replies live
+    // behind the comment count, in the /shoutbox/m/:id detail page
     const topLevel = [];
-    const repliesByParent = new Map();
     for (const m of messages.values()) {
-      if (m.reply_to_id && messages.has(m.reply_to_id)) {
-        const arr = repliesByParent.get(m.reply_to_id) || [];
-        arr.push(m);
-        repliesByParent.set(m.reply_to_id, arr);
-      } else {
+      if (!m.reply_to_id) {
         topLevel.push(m);
       }
     }
@@ -661,24 +655,22 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
     for (const m of topLevel) {
       const animate = m.id > cutoff;
       widget.els.list.appendChild(buildRow(widget, m, { animate }));
-      last = m;
-      // replies stay chronological under their parent
-      for (const r of (repliesByParent.get(m.id) || []).sort((x, y) => x.id - y.id)) {
-        widget.els.list.appendChild(buildRow(widget, r, { animate }));
-        last = r;
-      }
     }
-    if (last) {
-      lastSeenId = Math.max(lastSeenId, last.id);
-    }
+    // replies count toward lastSeenId too, or every poll would refetch them
+    lastSeenId = Math.max(lastSeenId, maxId());
     showEmptyStateIfNeeded(widget);
     renderFoot(widget);
     renderSide(widget);
     applySearchFilter(widget);
+    applyClamps(widget);
     scrollToTop(widget);
   };
 
   widget.appendRow = (m, { isNew = false, forceScroll = false } = {}) => {
+    // replies never render in the feed — the detail page owns them
+    if (m.reply_to_id) {
+      return;
+    }
     hideEmptyState(widget);
     const animate = isNew && m.id > lastSeenId;
     lastSeenId = Math.max(lastSeenId, m.id);
@@ -686,25 +678,10 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
     widget.els.list.insertBefore(buildRow(widget, m, { animate }), widget.els.list.firstChild);
     renderSide(widget);
     applySearchFilter(widget);
+    applyClamps(widget);
     if (isNew || forceScroll) {
       scrollToTop(widget);
     }
-  };
-
-  widget.insertReplyRow = (m) => {
-    hideEmptyState(widget);
-    const parent = widget.els.list.querySelector(`[data-id="${m.reply_to_id}"]`);
-    const replyRow = buildRow(widget, m, { isReply: true });
-    if (parent) {
-      const replyRows = [
-        ...widget.els.list.querySelectorAll(`[data-reply-to="${m.reply_to_id}"]`),
-      ];
-      (replyRows.length ? replyRows[replyRows.length - 1] : parent).after(replyRow);
-    } else {
-      widget.els.list.appendChild(replyRow);
-    }
-    renderSide(widget);
-    applySearchFilter(widget);
   };
 
   widget.removeRow = (id) => {
@@ -720,6 +697,7 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
     }
     old.replaceWith(buildRow(widget, m, {}));
     applySearchFilter(widget);
+    applyClamps(widget);
   };
 
   widget.showError = () => {
@@ -869,7 +847,28 @@ function buildRow(widget, m, { animate = false, isReply = false } = {}) {
     text.style.color = m.color;
   }
   renderRichText(text, esc(m.message));
+  // memos-style: long content clamps to 4 lines with a more/less toggle —
+  // the button only shows once the row is measured in applyClamps()
+  text.classList.add("shoutbox__clamped");
+  const more = el("button", "shoutbox__more");
+  more.type = "button";
+  more.hidden = true;
+  more.textContent = i18n("shoutbox.more");
+  more.addEventListener("click", () => {
+    const expanded = text.classList.toggle("is-expanded");
+    more.textContent = i18n(expanded ? "shoutbox.less" : "shoutbox.more");
+  });
   body.appendChild(text);
+  body.appendChild(more);
+  // clicking the message body opens the per-message detail page (memos);
+  // links, buttons and the in-place editor keep their own behavior
+  body.addEventListener("click", (event) => {
+    if (event.target.closest("a, button") || li.classList.contains("shoutbox__item--editing")) {
+      return;
+    }
+    DiscourseURL.routeTo(`/shoutbox/m/${m.id}`);
+  });
+
   li.appendChild(body);
 
   // foot: stats (comment / like / views / time)
@@ -1304,6 +1303,25 @@ function toggleCommentBox(widget, m, row) {
     } else if (event.key === "Escape") {
       box.remove();
     }
+  });
+}
+
+// Show the more/less toggle only for rows whose content actually overflows
+// the 4-line clamp (measured after the row is in the DOM).
+function applyClamps(widget) {
+  requestAnimationFrame(() => {
+    if (widget.destroyed || !widget.els.list) {
+      return;
+    }
+    widget.els.list.querySelectorAll(".shoutbox__text.shoutbox__clamped").forEach((text) => {
+      if (text.classList.contains("is-expanded")) {
+        return;
+      }
+      const more = text.parentElement?.querySelector(".shoutbox__more");
+      if (more) {
+        more.hidden = text.scrollHeight <= text.clientHeight + 2;
+      }
+    });
   });
 }
 
@@ -2004,4 +2022,191 @@ function buildPopovers(widget) {
   });
 
   return wrap;
+}
+
+// ── per-message detail page (/shoutbox/m/:id) ────────────────────────────────
+// Memos-style: back link, the message card, then its comments with a compose
+// box. Standalone from the feed widgets — data comes from the show endpoint.
+
+function buildDetailReply(m) {
+  const row = el("div", "shoutbox__detail-reply");
+  if (m.user?.avatar_template) {
+    const img = el("img", "shoutbox__detail-reply-avatar");
+    img.src = m.user.avatar_template.replace("{size}", "48");
+    img.alt = "";
+    img.loading = "lazy";
+    row.appendChild(img);
+  }
+  const main = el("div", "shoutbox__detail-reply-main");
+  const meta = el("div", "shoutbox__detail-reply-meta");
+  const a = makeLink(userHref(m), "shoutbox__detail-reply-name");
+  a.textContent = m.user?.name || m.user?.username || "?";
+  meta.appendChild(a);
+  meta.appendChild(el("span", "shoutbox__detail-reply-handle", `@${m.user?.username || "?"}`));
+  const date = new Date(m.created_at);
+  if (!isNaN(date.getTime())) {
+    const time = el("span", "shoutbox__detail-reply-time");
+    time.textContent = relativeAge(date, { format: "tiny" });
+    time.title = date.toLocaleString();
+    meta.appendChild(time);
+  }
+  main.appendChild(meta);
+  const text = el("div", "shoutbox__detail-reply-text");
+  renderRichText(text, m.message || "");
+  main.appendChild(text);
+  row.appendChild(main);
+  return row;
+}
+
+export function mountShoutboxDetail(rootEl, { id }) {
+  const state = { destroyed: false };
+
+  const wrap = el("div", "shoutbox-detail");
+  rootEl.appendChild(wrap);
+
+  const back = el("a", "shoutbox-detail__back");
+  back.href = "/shoutbox";
+  back.innerHTML = iconHTML("arrow-left");
+  back.appendChild(el("span", null, i18n("shoutbox.detail_back")));
+  wrap.appendChild(back);
+
+  const card = el("div", "shoutbox__item jt-card shoutbox-detail__card");
+  card.appendChild(el("li", "shoutbox__msg", "\u2026"));
+  wrap.appendChild(card);
+
+  const listEl = el("div", "shoutbox__detail-list");
+  wrap.appendChild(listEl);
+
+  const compose = el("div", "shoutbox__detail-compose");
+  compose.hidden = true;
+  const ta = el("textarea", "shoutbox__comment-input");
+  ta.rows = 1;
+  ta.maxLength = 200;
+  ta.placeholder = i18n("shoutbox.comment_placeholder");
+  compose.appendChild(ta);
+  const bar = el("div", "shoutbox__comment-bar");
+  const count = el("span", "shoutbox__count");
+  const actions = el("div", "shoutbox__composer-actions");
+  const publish = el("button", "shoutbox__send");
+  publish.type = "button";
+  publish.textContent = i18n("shoutbox.publish");
+  publish.disabled = true;
+  actions.appendChild(publish);
+  bar.appendChild(count);
+  bar.appendChild(actions);
+  compose.appendChild(bar);
+  wrap.appendChild(compose);
+
+  const update = () => {
+    count.textContent = i18n("shoutbox.count", { current: ta.value.length, max: ta.maxLength });
+    publish.disabled = ta.value.trim().length === 0;
+  };
+  update();
+  ta.addEventListener("input", update);
+
+  const appendReply = (r) => {
+    listEl.querySelector(".shoutbox__detail-empty")?.remove();
+    listEl.appendChild(buildDetailReply(r));
+    listEl.scrollTop = listEl.scrollHeight;
+  };
+
+  publish.addEventListener("click", () => {
+    const text = ta.value.trim();
+    if (!text || publish.disabled) {
+      return;
+    }
+    publish.disabled = true;
+    publish.textContent = i18n("shoutbox.posting");
+    ajax("/shoutbox/messages.json", {
+      type: "POST",
+      data: { message: text, reply_to_id: Number(id) },
+    })
+      .then((payload) => {
+        ta.value = "";
+        update();
+        if (payload?.message) {
+          appendReply(payload.message);
+        }
+        publish.disabled = false;
+        publish.textContent = i18n("shoutbox.publish");
+        ta.focus();
+      })
+      .catch((err) => {
+        publish.disabled = false;
+        publish.textContent = i18n("shoutbox.publish");
+        window.alert(err?.jqXHR?.responseJSON?.errors?.[0] || i18n("shoutbox.send_failed"));
+      });
+  });
+
+  ta.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey || !event.shiftKey)) {
+      event.preventDefault();
+      if (!publish.disabled) {
+        publish.click();
+      }
+    }
+  });
+
+  ajax(`/shoutbox/messages/${Number(id)}.json`)
+    .then((payload) => {
+      if (state.destroyed) {
+        return;
+      }
+      if (payload.viewer?.can_post) {
+        compose.hidden = false;
+      }
+      const m = payload.message;
+
+      card.replaceChildren();
+      const meta = el("div", "jt-card__meta");
+      const author = el("span", "shoutbox__author");
+      if (m.user?.avatar_template) {
+        const img = el("img", "shoutbox__author-avatar");
+        img.src = m.user.avatar_template.replace("{size}", "48");
+        img.alt = "";
+        img.loading = "lazy";
+        author.appendChild(img);
+      }
+      const name = makeLink(userHref(m), "shoutbox__name");
+      name.textContent = m.user?.name || m.user?.username || "?";
+      author.appendChild(name);
+      author.appendChild(el("a", "shoutbox__handle", `@${m.user?.username || "?"}`));
+      meta.appendChild(author);
+      const date = new Date(m.created_at);
+      if (!isNaN(date.getTime())) {
+        const when = el("span", "shoutbox-detail__time");
+        when.textContent = relativeAge(date, { format: "tiny" });
+        when.title = date.toLocaleString();
+        meta.appendChild(when);
+      }
+      card.appendChild(meta);
+
+      const body = el("div", "shoutbox__body");
+      const text = el("div", "shoutbox__text");
+      renderRichText(text, m.message || "");
+      body.appendChild(text);
+      card.appendChild(body);
+
+      const replies = payload.replies || [];
+      listEl.replaceChildren();
+      if (replies.length === 0) {
+        listEl.appendChild(el("div", "shoutbox__detail-empty", i18n("shoutbox.detail_empty")));
+      } else {
+        replies.forEach((r) => listEl.appendChild(buildDetailReply(r)));
+      }
+    })
+    .catch(() => {
+      if (!state.destroyed) {
+        card.replaceChildren(el("li", "shoutbox__msg", i18n("shoutbox.load_failed")));
+      }
+    });
+
+  return { rootEl, destroy: () => (state.destroyed = true) };
+}
+
+export function unmountShoutboxDetail(widget) {
+  widget?.destroy?.();
+  if (widget?.rootEl) {
+    widget.rootEl.replaceChildren();
+  }
 }
