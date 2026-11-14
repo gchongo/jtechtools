@@ -1117,16 +1117,22 @@ function renderSide(widget) {
     shown.forEach((m) => {
       const row = el("button", "shoutbox-side__excerpt-row");
       row.type = "button";
-      row.appendChild(
+      const main = el("div", "shoutbox-side__excerpt-main");
+      main.appendChild(
         el(
           "div",
           "shoutbox-side__excerpt-meta",
           i18n("shoutbox.side_from", { username: m.user?.username || "?" }),
         ),
       );
-      row.appendChild(
+      main.appendChild(
         el("div", "shoutbox-side__excerpt", excerptFor(m) || i18n("shoutbox.side_photo")),
       );
+      row.appendChild(main);
+      // trailing ⁝ appears on hover (memos-style)
+      const dots = el("span", "shoutbox-side__excerpt-dots");
+      dots.innerHTML = iconHTML("ellipsis-vertical");
+      row.appendChild(dots);
       row.addEventListener("click", () => jumpToMessage(widget, m.id));
       whatsNew.appendChild(row);
     });

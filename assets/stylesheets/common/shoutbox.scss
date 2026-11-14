@@ -637,29 +637,47 @@
 
 .shoutbox-side__card {
   background: var(--secondary);
-  border: 1px solid var(--shoutbox-border);
-  border-radius: var(--shoutbox-radius);
+  border: 1px solid var(--jt-border, var(--primary-low));
+  border-radius: 1em;
   padding: 1em;
 }
 
-// sidebar search box (memos-style pill at the top of the column)
+// sidebar search: standalone pill (no card chrome) — icon sits absolutely
+// inside, focus ring in the accent color (memos reference)
 .shoutbox-side__card--search {
-  padding: 0.4em;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin-bottom: 1.25em;
 }
 
 .shoutbox-side__search {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 0.45em;
-  background: var(--jt-surface-sunken, var(--primary-very-low));
+  background: var(--secondary);
   border: 1px solid var(--jt-border, var(--primary-low));
   border-radius: 999px;
-  padding: 0.4em 0.9em;
+  transition: box-shadow 0.15s ease;
+
+  &:focus-within {
+    box-shadow: 0 0 0 1px var(--jt-accent, var(--tertiary));
+  }
 }
 
 .shoutbox-side__search-icon {
+  position: absolute;
+  left: 1em;
+  top: 50%;
+  transform: translateY(-50%);
   display: inline-flex;
   color: var(--shoutbox-muted);
+
+  svg {
+    width: 1.1em;
+    height: 1.1em;
+  }
 }
 
 .shoutbox-side__search-input {
@@ -669,45 +687,69 @@
   border: none;
   outline: none;
   color: var(--shoutbox-text);
-  font-size: var(--font-down-1);
+  font-size: 0.94em;
+  padding: 0.75em 1em 0.75em 3em;
 
   &::placeholder {
     color: var(--shoutbox-muted);
   }
 }
 
-// "What's new" excerpt rows
+// "What's new" excerpt rows (memos-style): no dividers, hover fill, trailing
+// ⁝ that fades in on hover
 .shoutbox-side__excerpt-row {
-  display: block;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75em;
   width: 100%;
   text-align: left;
   background: none;
   border: none;
-  padding: 0.5em 0;
+  border-radius: 0.5em;
+  padding: 0.7em 0.5em;
   cursor: pointer;
 
-  & + & {
-    border-top: 1px solid var(--shoutbox-border);
+  &:hover {
+    background: var(--shoutbox-hover);
   }
+}
 
-  &:hover .shoutbox-side__excerpt {
-    color: var(--shoutbox-accent);
-  }
+.shoutbox-side__excerpt-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .shoutbox-side__excerpt-meta {
   font-size: var(--font-down-2);
+  line-height: 1;
   color: var(--shoutbox-muted);
-  margin-bottom: 0.2em;
-}
-
-.shoutbox-side__excerpt {
-  font-weight: 600;
-  color: var(--shoutbox-text);
-  font-size: var(--font-down-1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.shoutbox-side__excerpt {
+  margin-top: 0.25em;
+  font-weight: 700;
+  color: var(--shoutbox-text);
+  font-size: 0.94em;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shoutbox-side__excerpt-dots {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--shoutbox-muted);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.shoutbox-side__excerpt-row:hover .shoutbox-side__excerpt-dots {
+  opacity: 1;
 }
 
 .shoutbox-side__more {
@@ -730,7 +772,8 @@
 }
 
 .shoutbox-side__title {
-  font-weight: bold;
+  font-weight: 800;
+  font-size: 1.1em;
   color: var(--primary);
   margin-bottom: 0.6em;
 }
