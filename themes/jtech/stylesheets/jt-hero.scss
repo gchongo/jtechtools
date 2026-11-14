@@ -782,3 +782,29 @@ $jt-stars-near: (
     backdrop-filter: none;
   }
 }
+
+// ── Layout-custom: hero search transparency ─────────────────────────────────
+// Hero 搜索框：透明融入星球背景（导航栏的 Sign Up / Log In 不受影响，由
+// 模板层控制；这里只隐藏 hero 大横幅里的那对按钮）
+.jt-hero__sign-up,
+.jt-hero__log-in {
+  display: none !important;
+}
+
+.jt-hero .jt-hero__search {
+  background: transparent;
+  border-color: var(--jt-border);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.jt-hero .jt-hero__go {
+  background: transparent;
+  border: 1px solid var(--jt-border);
+  color: var(--jt-text-subtle);
+}
+
+.jt-hero .jt-hero__go:hover {
+  background: var(--jt-hover);
+  color: var(--jt-text);
+}

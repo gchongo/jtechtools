@@ -564,157 +564,227 @@ export function unmountShoutbox(widget) {
 // ── pieces ───────────────────────────────────────────────────────────────────
 
 function buildRow(widget, m, { animate = false, isReply = false } = {}) {
-  const li = el("li", "shoutbox__item");
+  const li = el("li", "shoutbox__item jt-card");
   li.dataset.id = m.id;
   const replyRow = isReply || !!m.reply_to_id;
   li.classList.toggle("shoutbox__item--reply", replyRow);
   if (m.reply_to_id) {
     li.dataset.replyTo = m.reply_to_id;
   }
+  if (m.pinned) {
+    li.classList.add("shoutbox__item--pinned");
+  }
   if (animate) {
     li.classList.add("shoutbox__item--new");
   }
 
-  if (m.user?.avatar_template) {
-    const img = el("img", "shoutbox__avatar");
-    img.src = avatarSrc(m);
-    img.alt = "";
-    img.loading = "lazy";
-    li.appendChild(img);
-  }
-
-  const main = el("div", "shoutbox__main");
-  const line = el("div", "shoutbox__meta-line");
-
-  // memos-style dual name: nickname (or username) bold + @username muted
+  // meta: author + handle, pinned flag right
+  const meta = el("div", "jt-card__meta");
+  const author = el("span", "shoutbox__author");
   const name = makeLink(userHref(m), "shoutbox__name");
   name.textContent = esc(m.user?.name || m.user?.username);
-  line.appendChild(name);
-
+  author.appendChild(name);
   const handle = makeLink(userHref(m), "shoutbox__handle");
   handle.textContent = `@${esc(m.user?.username)}`;
-  line.appendChild(handle);
-
-  line.appendChild(el("span", "shoutbox__dot", "·"));
-
-  const time = el("span", "shoutbox__time");
-  const date = new Date(m.created_at);
-  time.textContent = relativeAge(date, { format: "tiny" });
-  time.title = date.toLocaleString();
-  line.appendChild(time);
-
-  // memos-style: row actions (copy link / edit / delete / pin) behind ⁝
-  const metaActions = el("span", "shoutbox__meta-actions");
-  if (m.can_edit || m.can_delete || viewer?.staff) {
-    const dots = el("button", "shoutbox__action shoutbox__menu-btn");
-    dots.type = "button";
-    dots.innerHTML = iconHTML("ellipsis-vertical");
-    dots.title = i18n("shoutbox.menu");
-    dots.setAttribute("aria-label", i18n("shoutbox.menu"));
-    dots.addEventListener("click", (event) => {
-      event.stopPropagation();
-      openRowMenu(widget, m, metaActions);
-    });
-    metaActions.appendChild(dots);
+  author.appendChild(handle);
+  meta.appendChild(author);
+  const flags = el("span", "jt-card__flags");
+  if (m.pinned) {
+    flags.appendChild(el("span", "jt-pill", `\u{1F4CC} ${i18n("shoutbox.pinned_label")}`));
   }
-  line.appendChild(metaActions);
-  main.appendChild(line);
+  meta.appendChild(flags);
+  li.appendChild(meta);
 
-  const text = el("div", "shoutbox__text");
+  // body: content
+  const body = el("div", "jt-card__body");
+  const text = el("div", "jt-card__text");
   if (m.color) {
     text.style.color = m.color;
   }
   renderRichText(text, esc(m.message));
-  main.appendChild(text);
+  body.appendChild(text);
+  li.appendChild(body);
 
-  // memos-style long content: clamp at 200px with a fade + show-more toggle
-  if (widget.variant === "page") {
-    text.classList.add("shoutbox__text--clamped");
-    requestAnimationFrame(() => {
-      if (widget.destroyed || text.scrollHeight <= 210) {
-        return;
-      }
-      const fade = el("div", "shoutbox__fade");
-      fade.setAttribute("aria-hidden", "true");
-      const more = el("button", "shoutbox__more");
-      more.type = "button";
-      more.textContent = i18n("shoutbox.show_more");
-      more.addEventListener("click", () => {
-        const expanded = text.classList.toggle("is-expanded");
-        fade.hidden = expanded;
-        more.textContent = i18n(expanded ? "shoutbox.show_less" : "shoutbox.show_more");
-      });
-      text.appendChild(fade);
-      main.appendChild(more);
-    });
+  // foot: avatar + stats (comment / like / views / time) + row menu
+  const foot = el("div", "jt-card__foot");
+  const people = el("span", "jt-card__people");
+  if (m.user?.avatar_template) {
+    const link = el("a", "shoutbox__people-link");
+    link.href = userHref(m);
+    const avatar = el("img", "avatar");
+    avatar.src = avatarSrc(m, 24);
+    avatar.alt = "";
+    avatar.loading = "lazy";
+    link.appendChild(avatar);
+    people.appendChild(link);
   }
-  li.appendChild(main);
+  foot.appendChild(people);
 
-  // memos-style bottom action bar: reply / quote / like
-  const actions = el("div", "shoutbox__actions");
+  const stats = el("span", "jt-card__stats");
 
-  const reply = el("button", "shoutbox__action shoutbox__action--pill shoutbox__comment-btn");
-  reply.type = "button";
-  reply.innerHTML = iconHTML("far-comment");
+  const commentBtn = el("button", "jt-card__stat shoutbox__stat-btn");
+  commentBtn.type = "button";
+  commentBtn.innerHTML = iconHTML("far-comment");
   if (m.reply_count > 0) {
-    reply.appendChild(el("span", "shoutbox__action-label", String(m.reply_count)));
+    commentBtn.appendChild(el("span", "number", String(m.reply_count)));
   }
-  reply.title = i18n("shoutbox.comment");
-  reply.setAttribute("aria-label", i18n("shoutbox.comment"));
-  reply.addEventListener("click", () => toggleCommentBox(widget, m, li));
-  actions.appendChild(reply);
+  commentBtn.title = i18n("shoutbox.comment");
+  commentBtn.setAttribute("aria-label", i18n("shoutbox.comment"));
+  commentBtn.addEventListener("click", () => toggleCommentBox(widget, m, li));
+  stats.appendChild(commentBtn);
 
-  const quote = el("button", "shoutbox__action shoutbox__action--pill");
-  quote.type = "button";
-  quote.innerHTML = iconHTML("repeat");
-  quote.title = i18n("shoutbox.repost");
-  quote.setAttribute("aria-label", i18n("shoutbox.repost"));
-  quote.addEventListener("click", () => {
-    if (widget.els.plusBtn) {
-      widget.els.composePop.hidden = false;
-    }
-    const ta = widget.els.composer;
-    if (ta) {
-      const excerpt = esc(m.message).slice(0, 200);
-      insertAtCursor(ta, `[quote="@${m.user?.username}"]\n${excerpt}\n[/quote]\n`);
-    }
-  });
-  actions.appendChild(quote);
-
-  const likeBtn = el("button", "shoutbox__action shoutbox__action--pill shoutbox__like");
+  const likeBtn = el("button", "jt-card__stat shoutbox__stat-btn shoutbox__like");
   likeBtn.type = "button";
   likeBtn.title = i18n("shoutbox.like");
   likeBtn.setAttribute("aria-label", i18n("shoutbox.like"));
   renderLikeBtn(likeBtn, m);
   likeBtn.addEventListener("click", () => toggleLike(widget, m, likeBtn));
-  actions.appendChild(likeBtn);
+  stats.appendChild(likeBtn);
 
-  const views = el("span", "shoutbox__action shoutbox__action--views");
+  const views = el("span", "jt-card__stat");
   views.title = i18n("shoutbox.views", { n: m.views || 0 });
   views.innerHTML =
     iconHTML("far-eye") +
-    '<span class="shoutbox__action-label">' + (m.views || 0) + "</span>";
-  actions.appendChild(views);
+    '<span class="number">' + (m.views || 0) + "</span>";
+  stats.appendChild(views);
 
-  const share = el("button", "shoutbox__action shoutbox__action--pill");
-  share.type = "button";
-  share.innerHTML = iconHTML("share");
-  share.title = i18n("shoutbox.share");
-  share.setAttribute("aria-label", i18n("shoutbox.share"));
-  share.addEventListener("click", () => copyMessageLink(m));
-  actions.appendChild(share);
+  const activity = el("span", "jt-card__stat --activity");
+  const time = el("span", "relative-date");
+  const date = new Date(m.created_at);
+  time.textContent = relativeAge(date, { format: "tiny" });
+  time.title = date.toLocaleString();
+  activity.appendChild(time);
+  stats.appendChild(activity);
 
-  li.appendChild(actions);
+  const menuBtn = el("button", "jt-card__peek btn btn-flat no-text");
+  menuBtn.type = "button";
+  menuBtn.innerHTML = iconHTML("ellipsis-vertical");
+  menuBtn.title = i18n("shoutbox.menu");
+  menuBtn.setAttribute("aria-label", i18n("shoutbox.menu"));
+  menuBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openRowMenu(widget, m, li);
+  });
+  stats.appendChild(menuBtn);
 
-  // memos-style impression counting: one POST per message per session when
-  // the row first scrolls into view
-  if (!viewedInSession.has(m.id)) {
-    seenObserver.observe(li);
+  foot.appendChild(stats);
+  li.appendChild(foot);
+
+  return li;
+}
+
+function renderLikeBtn(btn, m) {
+  btn.innerHTML =
+    iconHTML("far-heart") +
+    (m.like_count > 0 ? '<span class="number">' + m.like_count + "</span>" : "");
+  btn.classList.toggle("is-liked", !!m.liked);
+}
+
+function toggleLike(widget, m, btn) {
+  if (!viewer?.signed_in) {
+    window.location.href = "/login";
+    return;
   }
+  btn.disabled = true;
+  ajax(`/shoutbox/messages/${m.id}/like`, { type: "POST" })
+    .then((payload) => {
+      const msg = messages.get(m.id);
+      if (msg) {
+        msg.like_count = payload.like_count;
+        msg.liked = payload.liked;
+      }
+      renderLikeBtn(btn, msg || Object.assign({}, m, payload));
+    })
+    .catch((err) => {
+      window.alert(err?.jqXHR?.responseJSON?.errors?.[0] || i18n("shoutbox.send_failed"));
+    })
+    .finally(() => {
+      btn.disabled = false;
+    });
+}
 
-  return li;
+function deleteMessage(widget, m) {
+  if (!window.confirm(i18n("shoutbox.confirm_delete"))) {
+    return;
+  }
+  ajax(`/shoutbox/messages/${m.id}.json`, { type: "DELETE" }).catch((err) => {
+    window.alert(err?.jqXHR?.responseJSON?.errors?.[0] || i18n("shoutbox.send_failed"));
+  });
+}
 
-  return li;
+function copyMessageLink(m) {
+  const url = `${window.location.origin}/shoutbox#m-${m.id}`;
+  navigator.clipboard
+    ? navigator.clipboard.writeText(url).catch(() => {})
+    : window.prompt(i18n("shoutbox.copy_link"), url);
+  window.alert(i18n("shoutbox.copied"));
+}
+
+function startEdit(widget, m) {
+  editing = { id: m.id };
+  if (widget.els.plusBtn) {
+    widget.els.composePop.hidden = false;
+  }
+  widgets.forEach((w) => w.setEditingChip?.(true));
+  const ta = widget.els.composer;
+  if (!ta) {
+    return;
+  }
+  ta.value = m.message;
+  ta.dispatchEvent(new Event("input"));
+  ta.focus();
+}
+
+function cancelEdit(widget) {
+  editing = null;
+  widgets.forEach((w) => w.setEditingChip?.(false));
+  const ta = widget.els.composer;
+  if (ta) {
+    ta.value = "";
+    ta.dispatchEvent(new Event("input"));
+    ta.focus();
+  }
+}
+
+function openRowMenu(widget, m, container) {
+  // one menu at a time, per row
+  container.querySelector(":scope > .shoutbox__menu")?.remove();
+  const menu = el("div", "shoutbox__menu");
+  const add = (label, cls, fn) => {
+    const b = el("button", "shoutbox__menu-item" + (cls ? " " + cls : ""));
+    b.type = "button";
+    b.textContent = label;
+    b.addEventListener("click", () => {
+      menu.remove();
+      document.removeEventListener("click", close);
+      fn();
+    });
+    menu.appendChild(b);
+  };
+
+  if (m.can_edit) {
+    add(i18n("shoutbox.edit"), "", () => startEdit(widget, m));
+  }
+  if (m.can_delete) {
+    add(i18n("shoutbox.delete"), "is-danger", () => deleteMessage(widget, m));
+  }
+  if (viewer?.staff) {
+    add(i18n(m.pinned ? "shoutbox.unpin" : "shoutbox.pin"), "", () => {
+      ajax(`/shoutbox/messages/${m.id}/pin`, { type: "POST" }).catch((err) => {
+        window.alert(err?.jqXHR?.responseJSON?.errors?.[0] || i18n("shoutbox.send_failed"));
+      });
+    });
+  }
+  add(i18n("shoutbox.copy_link"), "", () => copyMessageLink(m));
+
+  container.appendChild(menu);
+  const close = (event) => {
+    if (!menu.contains(event.target)) {
+      menu.remove();
+      document.removeEventListener("click", close);
+    }
+  };
+  setTimeout(() => document.addEventListener("click", close), 0);
 }
 
 // memos-style inline comment box under a message row: submit posts the
@@ -810,120 +880,6 @@ function toggleCommentBox(widget, m, row) {
       box.remove();
     }
   });
-}
-
-function renderLikeBtn(btn, m) {
-  btn.innerHTML =
-    iconHTML("far-heart") +
-    (m.like_count > 0 ? '<span class="shoutbox__action-label">' + m.like_count + "</span>" : "");
-  btn.classList.toggle("is-liked", !!m.liked);
-}
-
-function toggleLike(widget, m, btn) {
-  if (!viewer?.signed_in) {
-    window.location.href = "/login";
-    return;
-  }
-  btn.disabled = true;
-  ajax(`/shoutbox/messages/${m.id}/like`, { type: "POST" })
-    .then((payload) => {
-      const msg = messages.get(m.id);
-      if (msg) {
-        msg.like_count = payload.like_count;
-        msg.liked = payload.liked;
-      }
-      renderLikeBtn(btn, msg || Object.assign({}, m, payload));
-    })
-    .catch((err) => {
-      window.alert(err?.jqXHR?.responseJSON?.errors?.[0] || i18n("shoutbox.send_failed"));
-    })
-    .finally(() => {
-      btn.disabled = false;
-    });
-}
-
-// ── row menu (copy link / edit / delete / pin) ───────────────────────────────
-function deleteMessage(widget, m) {
-  if (!window.confirm(i18n("shoutbox.confirm_delete"))) {
-    return;
-  }
-  ajax(`/shoutbox/messages/${m.id}.json`, { type: "DELETE" }).catch((err) => {
-    window.alert(err?.jqXHR?.responseJSON?.errors?.[0] || i18n("shoutbox.send_failed"));
-  });
-}
-
-function copyMessageLink(m) {
-  const url = `${window.location.origin}/shoutbox#m-${m.id}`;
-  navigator.clipboard
-    ? navigator.clipboard.writeText(url).catch(() => {})
-    : window.prompt(i18n("shoutbox.copy_link"), url);
-  window.alert(i18n("shoutbox.copied"));
-}
-
-function startEdit(widget, m) {
-  editing = { id: m.id };
-  if (widget.els.plusBtn) {
-    widget.els.composePop.hidden = false;
-  }
-  widgets.forEach((w) => w.setEditingChip?.(true));
-  const ta = widget.els.composer;
-  if (!ta) {
-    return;
-  }
-  ta.value = m.message;
-  ta.dispatchEvent(new Event("input"));
-  ta.focus();
-}
-
-function cancelEdit(widget) {
-  editing = null;
-  widgets.forEach((w) => w.setEditingChip?.(false));
-  const ta = widget.els.composer;
-  if (ta) {
-    ta.value = "";
-    ta.dispatchEvent(new Event("input"));
-    ta.focus();
-  }
-}
-
-function openRowMenu(widget, m, container) {
-  // one menu at a time, per row
-  container.querySelector(".shoutbox__menu")?.remove();
-  const menu = el("div", "shoutbox__menu");
-  const add = (label, cls, fn) => {
-    const b = el("button", "shoutbox__menu-item" + (cls ? " " + cls : ""));
-    b.type = "button";
-    b.textContent = label;
-    b.addEventListener("click", () => {
-      menu.remove();
-      document.removeEventListener("click", close);
-      fn();
-    });
-    menu.appendChild(b);
-  };
-
-  if (m.can_edit) {
-    add(i18n("shoutbox.edit"), "", () => startEdit(widget, m));
-  }
-  if (m.can_delete) {
-    add(i18n("shoutbox.delete"), "is-danger", () => deleteMessage(widget, m));
-  }
-  if (viewer?.staff) {
-    add(i18n(m.pinned ? "shoutbox.unpin" : "shoutbox.pin"), "", () => {
-      ajax(`/shoutbox/messages/${m.id}/pin`, { type: "POST" }).catch((err) => {
-        window.alert(err?.jqXHR?.responseJSON?.errors?.[0] || i18n("shoutbox.send_failed"));
-      });
-    });
-  }
-
-  container.appendChild(menu);
-  const close = (event) => {
-    if (!menu.contains(event.target)) {
-      menu.remove();
-      document.removeEventListener("click", close);
-    }
-  };
-  setTimeout(() => document.addEventListener("click", close), 0);
 }
 
 // Fires the view POST when a message row first scrolls into view.

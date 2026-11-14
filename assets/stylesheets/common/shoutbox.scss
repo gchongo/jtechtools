@@ -1017,3 +1017,81 @@
   cursor: pointer;
   padding: 0 0.3em;
 }
+// ── message rows use the theme jt-card anatomy ───────────────────────────────
+// Rows carry the same classes as the homepage topic cards (jt-card +
+// jt-card__meta/body/foot), so the theme's own jt-cards.scss styles them; the
+// block below only adds the card chrome (topic-list-item's) and the bits the
+// shoutbox needs on top.
+.shoutbox__item.jt-card {
+  position: relative;
+  cursor: default;
+  background: var(--jt-surface-raised);
+  border: 1px solid var(--jt-border);
+  border-radius: var(--jt-radius-lg);
+
+  &:hover {
+    background: var(--jt-surface-raised);
+
+    .jt-card__peek {
+      opacity: 1;
+    }
+  }
+}
+
+.shoutbox__author {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4em;
+  min-width: 0;
+}
+
+.shoutbox__name {
+  font-weight: bold;
+  color: var(--shoutbox-text);
+
+  &:hover {
+    text-decoration: none;
+    color: var(--shoutbox-accent);
+  }
+}
+
+.shoutbox__handle {
+  font-size: var(--font-down-1);
+  color: var(--shoutbox-muted);
+
+  &:hover {
+    text-decoration: none;
+    color: var(--shoutbox-accent);
+  }
+}
+
+.shoutbox__people .avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--jt-radius-avatar);
+  object-fit: cover;
+}
+
+// stat buttons (comment / like) are clickable; views is a display stat
+.shoutbox__stat-btn {
+  cursor: pointer;
+
+  &:hover {
+    color: var(--shoutbox-accent);
+  }
+}
+
+.shoutbox__like.is-liked {
+  color: var(--shoutbox-accent);
+}
+
+// replies indent under their parent's content column
+.shoutbox__item--reply {
+  margin-left: 2.6em;
+}
+
+// the inline comment box spans the card above the foot
+.shoutbox--page .shoutbox__comment-box {
+  grid-column: auto;
+}
+

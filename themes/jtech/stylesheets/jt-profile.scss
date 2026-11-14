@@ -702,3 +702,85 @@
     }
   }
 }
+// Delete 按钮：搬进按钮行后与其他按钮同尺寸（核心默认是 btn-small）
+.user-main .about .controls .select-kit.btn-delete-user {
+  font-size: var(--font-0);
+
+  .select-kit-header {
+    min-height: 0;
+    padding: 0.5em 0.65em;
+    font-size: inherit;
+  }
+}
+
+// 按钮行里的下拉菜单（通知级别 Normal、Delete）：
+// 只留标题行，隐藏长说明文字，封顶宽度，选项每行一个
+.user-main .about .controls .select-kit {
+  .select-kit-row .desc {
+    display: none;
+  }
+
+  .select-kit-body {
+    max-width: 26rem;
+  }
+}
+
+// ── Layout-custom: profile page button row + stats bar ──────────────────────
+// chat 插件：把 summary 页按钮列表从竖排拉回横排
+.user-main .about .details .controls ul {
+  flex-direction: row;
+}
+
+// 按钮行：一行放下，放不下就换行
+.user-main .about .controls {
+  max-width: none;
+  margin: 0;
+}
+
+.user-main .about .controls ul {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+  margin: 0;
+}
+
+.user-main .about .controls ul > li {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.user-main .about .controls ul > li > * {
+  width: auto;
+  min-width: 0;
+}
+
+// 通知级别下拉框：核心在 <48rem 把它撑成 100% 宽，挤断整行
+.user-main .about .controls ul li .select-kit.dropdown-select-box.user-notifications-dropdown {
+  width: auto;
+  min-width: 0;
+}
+
+// 展开态（summary 页）：按钮行贴在名字下方
+.user-main .about:not(.collapsed-info) .details .primary .controls {
+  align-self: end;
+}
+
+// 折叠态（非 summary 的标签页）：整行左对齐
+.user-main .about.collapsed-info .details .primary .controls ul {
+  margin-left: 0;
+  justify-content: flex-start;
+}
+
+// 资料页统计条：均分整行宽度，去掉右侧空白
+.user-main .about .secondary dl {
+  justify-content: space-between;
+}
+
+// 手机端统计条：改为紧凑排列，避免换行后拉边留空
+html.mobile-view .user-main .about .secondary dl {
+  justify-content: flex-start;
+  column-gap: 1.5em;
+  row-gap: 0.75em;
+}

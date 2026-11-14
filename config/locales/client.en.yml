@@ -23,6 +23,7 @@ en:
       show_more: "Show more"
       show_less: "Show less"
       menu: "More"
+      pinned_label: "Pinned"
       edit: "Edit"
       editing: "Editing message"
       cancel: "Cancel"
