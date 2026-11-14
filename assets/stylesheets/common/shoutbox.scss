@@ -647,6 +647,26 @@
   display: flex;
   flex-direction: column;
   gap: 1.25em;
+  // independent vertical scroll, like Discourse's own sidebar: the column
+  // sticks to the viewport and scrolls within itself while the feed scrolls
+  max-height: calc(100dvh - var(--header-offset, 4em) - 2em);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--jt-border-strong, var(--primary-low-mid)) transparent;
+  overscroll-behavior: contain;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--jt-border-strong, var(--primary-low-mid));
+    border-radius: 999px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }
 
 .shoutbox-side__card {
@@ -1012,6 +1032,8 @@
 
 .shoutbox-detail__stats {
   display: flex;
+  // right-aligned like the feed cards' stats strip
+  justify-content: flex-end;
   gap: 1.6em;
   margin-top: 0.9em;
   padding-top: 0.7em;

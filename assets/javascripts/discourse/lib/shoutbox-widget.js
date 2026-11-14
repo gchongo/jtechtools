@@ -2123,11 +2123,7 @@ export function mountShoutboxDetail(rootEl, { id }) {
   parent.appendChild(el("li", "shoutbox__msg", "\u2026"));
   wrap.appendChild(parent);
 
-  // replies
-  const listEl = el("div", "shoutbox__detail-list");
-  wrap.appendChild(listEl);
-
-  // reply compose row (avatar + input + pill), like X's "Post your reply"
+  // reply compose row sits ABOVE the comment list, like X's detail page
   const compose = el("div", "shoutbox__detail-compose");
   compose.hidden = true;
   const cAvatar = el("img", "shoutbox__detail-compose-avatar");
@@ -2144,6 +2140,10 @@ export function mountShoutboxDetail(rootEl, { id }) {
   publish.disabled = true;
   compose.appendChild(publish);
   wrap.appendChild(compose);
+
+  // replies render below the compose row
+  const listEl = el("div", "shoutbox__detail-list");
+  wrap.appendChild(listEl);
 
   const update = () => {
     publish.disabled = ta.value.trim().length === 0;
