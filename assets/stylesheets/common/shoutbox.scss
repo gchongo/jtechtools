@@ -1,0 +1,772 @@
+// Shoutbox message board. Styled exclusively with core CSS variables so it
+// adapts to any color scheme (including the jtech dark theme) without
+// theme-specific overrides.
+.shoutbox {
+  --shoutbox-border: var(--primary-low);
+  --shoutbox-radius: 0.75em;
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--secondary);
+  border: 1px solid var(--shoutbox-border);
+  border-radius: var(--shoutbox-radius);
+  // NB: no overflow:hidden here — it would turn .shoutbox into the sticky
+  // scroll container and push a sticky head DOWN by the header offset.
+}
+
+// Rounded-corner clipping is only needed on the card-style panel variant.
+.shoutbox--panel {
+  overflow: hidden;
+}
+
+// ── head ─────────────────────────────────────────────────────────────────────
+.shoutbox__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5em;
+  padding: 0.6em 0.85em;
+  background: var(--tertiary-low);
+  border-bottom: 1px solid var(--shoutbox-border);
+}
+
+.shoutbox__title {
+  font-weight: bold;
+  color: var(--primary);
+  flex: 1 1 auto;
+}
+
+// Head icon buttons (panel variant): expand-to-full-page and ＋ compose.
+.shoutbox__open,
+.shoutbox__compose-toggle {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--tertiary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3em 0.45em;
+  border-radius: 0.4em;
+  flex-shrink: 0;
+  font-size: var(--font-up-1);
+
+  &:hover {
+    background: var(--primary-very-low);
+    color: var(--tertiary-hover, var(--tertiary));
+    text-decoration: none;
+  }
+
+  .d-icon {
+    width: 1em;
+    height: 1em;
+  }
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+// ── list ─────────────────────────────────────────────────────────────────────
+.shoutbox__list {
+  list-style: none;
+  margin: 0;
+  padding: 0.25em 0;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 6em;
+
+  .shoutbox--panel & {
+    height: var(--shoutbox-panel-height, 220px);
+  }
+
+  .shoutbox--page & {
+    height: calc(100dvh - var(--header-offset, 4em) - 180px);
+    min-height: 16em;
+  }
+}
+
+.shoutbox__msg {
+  padding: 1em;
+  text-align: center;
+  color: var(--primary-medium);
+}
+
+@keyframes shoutbox-new {
+  from {
+    background: var(--tertiary-low);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+.shoutbox__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6em;
+  padding: 0.5em 0.85em;
+  border-bottom: 1px solid var(--primary-very-low);
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &--new {
+    animation: shoutbox-new 2.5s ease-out;
+  }
+}
+
+.shoutbox__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.shoutbox__main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.shoutbox__meta-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+}
+
+.shoutbox__meta-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 0.4em;
+}
+
+.shoutbox__name {
+  font-weight: bold;
+  font-size: var(--font-down-1);
+  color: var(--primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:hover {
+    text-decoration: none;
+    color: var(--tertiary);
+  }
+}
+
+.shoutbox__time {
+  font-size: var(--font-down-2);
+  color: var(--primary-medium);
+  white-space: nowrap;
+}
+
+.shoutbox__text {
+  margin-top: 0.15em;
+  color: var(--primary);
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+
+  .shoutbox--page & {
+    -webkit-line-clamp: unset;
+    display: block;
+    font-size: var(--font-0);
+    line-height: 1.45;
+  }
+}
+
+// memos-style long content: 200px clamp, fade, show-more
+.shoutbox__text--clamped {
+  max-height: 200px;
+  overflow: hidden;
+  position: relative;
+
+  &.is-expanded {
+    max-height: none;
+  }
+}
+
+.shoutbox__fade {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 3em;
+  background: linear-gradient(to top, var(--secondary) 30%, transparent);
+  pointer-events: none;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.shoutbox__more {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--tertiary);
+  cursor: pointer;
+  min-height: 2.2em;
+  padding: 0.2em 0;
+  font-size: var(--font-0);
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.shoutbox__emoji {
+  width: 1.25em;
+  height: 1.25em;
+  vertical-align: -0.25em;
+}
+
+.shoutbox__link {
+  color: var(--tertiary);
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.shoutbox__mention {
+  color: var(--tertiary);
+  font-weight: bold;
+
+  &:hover {
+    text-decoration: none;
+  }
+}
+
+// ── row actions ──────────────────────────────────────────────────────────────
+.shoutbox__actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5em;
+  margin-top: 0.4em;
+}
+
+.shoutbox__action {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--primary-low-mid);
+  cursor: pointer;
+  padding: 0 0.25em;
+  font-size: var(--font-down-2);
+  line-height: 1.2;
+
+  &:hover {
+    color: var(--primary);
+  }
+
+  &--delete:hover {
+    color: var(--danger);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
+
+// ── composer ─────────────────────────────────────────────────────────────────
+.shoutbox__foot {
+  border-top: 1px solid var(--shoutbox-border);
+  padding: 0.5em 0.6em;
+  background: var(--secondary);
+}
+
+.shoutbox__composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.4em;
+  position: relative;
+}
+
+.shoutbox__composer {
+  flex: 1 1 auto;
+  resize: none;
+  min-height: 2.2em;
+  max-height: 6em;
+  padding: 0.5em 0.65em;
+  border: 1px solid var(--primary-medium);
+  border-radius: 0.5em;
+  background: var(--primary-very-low);
+  color: var(--primary);
+  font-size: var(--font-0);
+
+  &:focus {
+    outline: none;
+    border-color: var(--tertiary);
+  }
+}
+
+.shoutbox__composer-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--primary-medium);
+  cursor: pointer;
+  padding: 0.35em 0.45em;
+  border-radius: 0.4em;
+  flex-shrink: 0;
+  font-size: var(--font-up-1);
+
+  &:hover {
+    color: var(--tertiary);
+    background: var(--primary-very-low);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .d-icon {
+    width: 1em;
+    height: 1em;
+  }
+}
+
+.shoutbox__send {
+  color: var(--secondary);
+  background: var(--tertiary);
+
+  &:hover {
+    color: var(--secondary);
+    background: var(--tertiary-hover, var(--tertiary));
+  }
+}
+
+.shoutbox__composer-meta {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.2em;
+}
+
+.shoutbox__count {
+  font-size: var(--font-down-2);
+  color: var(--primary-medium);
+}
+
+// Panel variant: the composer lives in the ＋ popup, the foot is never used.
+.shoutbox--panel .shoutbox__foot {
+  display: none;
+}
+
+.shoutbox__compose-pop {
+  position: absolute;
+  bottom: 3em;
+  left: 0.6em;
+  right: 0.6em;
+  z-index: z("dropdown") + 2;
+  background: var(--secondary);
+  border: 1px solid var(--primary-low-mid);
+  border-radius: 0.6em;
+  box-shadow: var(--shadow-menu-panel, 0 0.5em 1.5em rgba(0, 0, 0, 0.25));
+  padding: 0.5em;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.shoutbox__login {
+  display: block;
+  text-align: center;
+  padding: 0.4em;
+  color: var(--primary-medium);
+  font-size: var(--font-down-1);
+
+  &:hover {
+    text-decoration: none;
+    color: var(--tertiary);
+  }
+}
+
+// ── popovers ─────────────────────────────────────────────────────────────────
+// Zero-height positioned wrap: popovers anchor to wherever the wrap sits —
+// widget bottom on the panel variant, right under the composer on the page.
+.shoutbox__popovers {
+  position: relative;
+  height: 0;
+}
+
+.shoutbox__emoji-pop {
+  position: absolute;
+  bottom: 4em;
+  left: 0.6em;
+  z-index: z("dropdown") + 1;
+  display: grid;
+  grid-template-columns: repeat(8, 2em);
+  gap: 2px;
+  padding: 0.5em;
+  max-width: calc(100% - 1.2em);
+  max-height: 12em;
+  overflow-y: auto;
+  background: var(--secondary);
+  border: 1px solid var(--primary-low-mid);
+  border-radius: 0.5em;
+  box-shadow: var(--shadow-menu-panel, 0 0.5em 1.5em rgba(0, 0, 0, 0.25));
+
+  // the hidden attribute alone can't win against the display: grid above
+  &[hidden] {
+    display: none;
+  }
+}
+
+.shoutbox__emoji-option {
+  width: 1.6em;
+  height: 1.6em;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  padding: 0;
+
+  &:hover {
+    transform: scale(1.2);
+  }
+}
+
+.shoutbox__mention-pop {
+  position: absolute;
+  bottom: 4em;
+  left: 3.2em;
+  right: 0.6em;
+  z-index: z("dropdown") + 1;
+  background: var(--secondary);
+  border: 1px solid var(--primary-low-mid);
+  border-radius: 0.5em;
+  box-shadow: var(--shadow-menu-panel, 0 0.5em 1.5em rgba(0, 0, 0, 0.25));
+  overflow: hidden;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.shoutbox__mention-option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.5em 0.7em;
+  border: none;
+  border-bottom: 1px solid var(--primary-very-low);
+  background: transparent;
+  color: var(--primary);
+  text-align: left;
+  cursor: pointer;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover,
+  &.is-active {
+    background: var(--tertiary-low);
+  }
+
+  img {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  span {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+
+    b {
+      font-size: var(--font-down-1);
+    }
+
+    small {
+      font-size: var(--font-down-2);
+      color: var(--primary-medium);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+}
+
+// ── homepage panel placement ─────────────────────────────────────────────────
+.shoutbox-home-panel {
+  margin-bottom: 1.5em;
+}
+
+// ── full page: X (twitter) style timeline ────────────────────────────────────
+// width: 100% is load-bearing — the wrap can land inside a grid/flex parent
+// (theme sidebar layouts) where a block child would otherwise shrink-to-fit.
+// The host is also the memos-style grid: timeline column + sticky side cards
+// on wide screens, single column with the side hidden below the breakpoint.
+.shoutbox-page-wrap {
+  width: 100%;
+}
+
+.shoutbox-page-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 38em) 19em;
+  gap: 2em;
+  justify-content: center;
+  align-items: start;
+  max-width: 64em;
+  margin: 1em auto 2em;
+
+  @media (width < 62em) {
+    grid-template-columns: minmax(0, 1fr);
+
+    .shoutbox-side {
+      display: none;
+    }
+  }
+}
+
+.shoutbox--page {
+  width: 100%;
+  min-height: 70dvh;
+}
+
+.shoutbox-side {
+  position: sticky;
+  top: calc(var(--header-offset, 4em) + 1em);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25em;
+}
+
+.shoutbox-side__card {
+  background: var(--secondary);
+  border: 1px solid var(--shoutbox-border);
+  border-radius: var(--shoutbox-radius);
+  padding: 1em;
+}
+
+.shoutbox-side__title {
+  font-weight: bold;
+  color: var(--primary);
+  margin-bottom: 0.6em;
+}
+
+.shoutbox-side__row {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.3em 0;
+
+  img {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+}
+
+.shoutbox-side__name {
+  font-weight: bold;
+  color: var(--primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:hover {
+    text-decoration: none;
+    color: var(--tertiary);
+  }
+}
+
+.shoutbox-side__count {
+  margin-left: auto;
+  font-size: var(--font-down-2);
+  color: var(--primary-medium);
+  white-space: nowrap;
+}
+
+.shoutbox-side__text {
+  color: var(--primary-medium);
+  font-size: var(--font-down-1);
+  line-height: var(--line-height-medium);
+  margin: 0;
+}
+
+// De-card the page variant: a bordered timeline column, not a panel.
+.shoutbox--page {
+  border-radius: 0;
+  border-top: none;
+  border-bottom: none;
+  border-inline: 1px solid var(--shoutbox-border);
+  background: var(--secondary);
+}
+
+.shoutbox--page .shoutbox__head {
+  position: sticky;
+  top: var(--header-offset, 4em);
+  z-index: z("dropdown") - 2;
+  background: var(--secondary);
+  padding: 0.85em 1em;
+  border-bottom: 1px solid var(--shoutbox-border);
+}
+
+.shoutbox--page .shoutbox__title {
+  font-size: var(--font-up-2);
+}
+
+// Composer on top, X-style: avatar, borderless input, circular send.
+.shoutbox--page .shoutbox__foot {
+  border-top: none;
+  border-bottom: 1px solid var(--shoutbox-border);
+  padding: 0.75em 1em 0.5em;
+}
+
+.shoutbox--page .shoutbox__composer-row {
+  align-items: flex-start;
+}
+
+.shoutbox__composer-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-right: 0.75em;
+}
+
+.shoutbox--page .shoutbox__composer {
+  border: none;
+  background: transparent;
+  font-size: var(--font-up-2);
+  padding: 0.3em 0;
+  min-height: 3.5em;
+  max-height: 12em;
+}
+
+.shoutbox--page .shoutbox__composer-meta {
+  padding-top: 0.3em;
+}
+
+.shoutbox--page .shoutbox__send {
+  border-radius: 50%;
+  width: 2.4em;
+  height: 2.4em;
+  padding: 0;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  .d-icon {
+    width: 1.1em;
+    height: 1.1em;
+  }
+}
+
+// Popovers drop downward from the composer on the page variant.
+.shoutbox--page .shoutbox__emoji-pop,
+.shoutbox--page .shoutbox__mention-pop {
+  bottom: auto;
+  top: 0.4em;
+}
+
+// Timeline rows: hairline separated, hover highlight, actions under content.
+.shoutbox--page .shoutbox__list {
+  min-height: 40dvh;
+  height: auto;
+  overflow-y: visible;
+  padding: 0;
+}
+
+.shoutbox--page .shoutbox__item {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 0 0.85em;
+  padding: 0.9em 1em;
+  border-bottom: 1px solid var(--shoutbox-border);
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: var(--primary-very-low);
+  }
+}
+
+.shoutbox--page .shoutbox__avatar {
+  width: 32px;
+  height: 32px;
+  grid-row: 1;
+  border-radius: 0.65em; // memos squircle, not a circle
+  border: 1px solid var(--shoutbox-border);
+}
+
+.shoutbox--page .shoutbox__main {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.shoutbox--page .shoutbox__meta-line {
+  font-size: var(--font-0);
+}
+
+.shoutbox--page .shoutbox__meta-actions .shoutbox__action {
+  font-size: var(--font-down-2);
+  padding: 0.2em 0.4em;
+}
+
+.shoutbox--page .shoutbox__actions {
+  grid-column: 2;
+  gap: 1em;
+  margin-top: 0.5em;
+}
+
+.shoutbox--page .shoutbox__action {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--primary-medium);
+  cursor: pointer;
+  border-radius: 999px;
+  padding: 0.4em 0.8em;
+  font-size: var(--font-0);
+  line-height: 1.3;
+  transition: background 0.15s ease, color 0.15s ease;
+
+  &:hover {
+    background: var(--primary-very-low);
+    color: var(--tertiary);
+  }
+
+  &--delete:hover {
+    color: var(--danger);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
+
+// ── mobile ───────────────────────────────────────────────────────────────────
+.mobile-view {
+  .shoutbox-home-panel {
+    margin: 0.75em 0.5em;
+  }
+
+  // 200px cap is for the panel variant only — the full page keeps its
+  // dvh-based height so it fills the screen instead of collapsing to half.
+  .shoutbox--panel .shoutbox__list {
+    height: 200px;
+  }
+
+  .shoutbox__emoji-pop {
+    grid-template-columns: repeat(6, 2em);
+  }
+}

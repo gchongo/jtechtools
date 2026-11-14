@@ -61,6 +61,15 @@ en:
       disteleplus_telegram: "Disteleplus could not deliver to Telegram (%{at}): <code>%{description}</code> — %{hint}"
 
   site_settings:
+    shoutbox_enabled: "Enable the shoutbox message board."
+    shoutbox_anonymous_view: "Anonymous visitors can read the message board."
+    shoutbox_sidebar_link: "Show a Message Board link in the sidebar community section."
+    shoutbox_homepage_panel: "Show the message board panel above the homepage topic list."
+    shoutbox_min_trust_level: "Minimum trust level required to post messages."
+    shoutbox_max_length: "Maximum length of a message."
+    shoutbox_messages_displayed: "Number of messages shown in the board."
+    shoutbox_max_stored: "Maximum number of messages stored (oldest are pruned)."
+    shoutbox_rate_limit_per_minute: "How many messages a user can post per minute."
     # NOTE: core renders `site_settings.<name>` as the setting's DESCRIPTION;
     # the label is derived from the setting name and is not translatable.
     # There is no `<name>_description` key — core never reads one.
@@ -1456,3 +1465,5 @@ en:
         Hello,
 
         A moderator has lifted slow mode on your account. You can post as usual again.
+  shoutbox:
+    not_allowed: "You are not allowed to post messages here."

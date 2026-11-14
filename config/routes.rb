@@ -262,4 +262,14 @@ Discourse::Application.routes.append do
 
   # Ember entry point (hard loads and links from notifications).
   get "/elections" => "discourse_mod_elections/elections#page"
+
+  # ── Shoutbox message board ──
+  # HTML requests for "/" serve the Ember app shell (the shoutbox route-map
+  # registers the /shoutbox page); JSON requests return the message list.
+  scope "/shoutbox", module: "discourse_shoutbox", as: :shoutbox do
+    get "/" => "shoutbox_messages#index"
+    get "/messages" => "shoutbox_messages#index", defaults: { format: :json }
+    post "/messages" => "shoutbox_messages#create", defaults: { format: :json }
+    delete "/messages/:id" => "shoutbox_messages#destroy", defaults: { format: :json }
+  end
 end

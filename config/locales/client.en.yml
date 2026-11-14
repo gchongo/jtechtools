@@ -1,5 +1,32 @@
 en:
   js:
+    shoutbox:
+      title: "Message Board"
+      open: "Open the full message board"
+      compose: "New message"
+      placeholder: "What's happening?"
+      publish: "Post"
+      posting: "Posting…"
+      delete: "Delete this message"
+      confirm_delete: "Delete this message? This cannot be undone."
+      reply: "Reply to @{{username}}"
+      count: "{{current}}/{{max}}"
+      empty: "No messages yet — be the first!"
+      load_failed: "Failed to load messages"
+      send_failed: "Failed to send, please try again"
+      too_long: "Message is too long"
+      login_required: "Log in to post"
+      login_prompt: "Log in to join the conversation"
+      rate_limited: "You are posting too fast, please slow down"
+      not_allowed: "You are not allowed to post here"
+      emoji_picker: "Emoji"
+      show_more: "Show more"
+      show_less: "Show less"
+      external_link: "External link"
+      topic_link: "Open topic"
+      side_active: "Most active"
+      side_count: "{{n}} messages"
+      side_about: "{{n}} messages so far. Short thoughts from the community — be kind, have fun."
     disteleplus:
       title: Disteleplus
       loading: Loading earlier messages…
