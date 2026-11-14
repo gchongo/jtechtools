@@ -897,88 +897,189 @@
   padding: 0.6em;
 }
 
-// ── detail view (comments live behind the feed's comment count) ─────────────
-.shoutbox__detail-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(2px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1em;
+// ── detail page (/shoutbox/m/:id) — X post-detail layout ──
+.shoutbox-detail-wrap {
+  max-width: 38em;
+  margin: 0 auto;
 }
 
-.shoutbox__detail {
-  width: 100%;
-  max-width: 38em;
-  max-height: 85dvh;
+.shoutbox-detail {
   display: flex;
   flex-direction: column;
-  gap: 0.75em;
-  background: var(--jt-surface-raised, var(--secondary));
-  border: 1px solid var(--jt-border, var(--primary-low));
-  border-radius: 1em;
-  padding: 1em;
-  overflow: hidden;
 }
 
-.shoutbox__detail-head {
+.shoutbox-detail__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 1em;
+  padding: 0.4em 0 0.6em;
+  border-bottom: 1px solid var(--jt-border, var(--primary-low));
 }
 
-.shoutbox__detail-title {
-  font-weight: 800;
-  font-size: 1.05em;
-  color: var(--primary);
-}
-
-.shoutbox__detail-close {
-  appearance: none;
-  border: none;
-  width: 1.9em;
-  height: 1.9em;
-  border-radius: 999px;
-  background: var(--jt-surface-sunken, var(--primary-very-low));
-  color: var(--shoutbox-muted);
-  cursor: pointer;
+.shoutbox-detail__back {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
+  width: 2.2em;
+  height: 2.2em;
+  border-radius: 999px;
+  color: var(--shoutbox-text);
+  text-decoration: none;
+
+  svg {
+    width: 1.1em;
+    height: 1.1em;
+  }
 
   &:hover {
-    color: var(--shoutbox-text);
     background: var(--shoutbox-hover);
   }
 }
 
-// the parent card inside the modal: same jt-card look, no shadow theater
-.shoutbox__detail .shoutbox__item {
-  margin: 0;
+.shoutbox-detail__heading {
+  font-weight: 800;
+  font-size: 1.15em;
+  color: var(--primary);
 }
 
+.shoutbox-detail__fail {
+  padding: 1em 0;
+}
+
+// parent message: borderless block with meta, big content, stats strip
+.shoutbox-detail__parent {
+  padding: 0.9em 0 0.8em;
+  border-bottom: 1px solid var(--jt-border, var(--primary-low));
+}
+
+.shoutbox-detail__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+}
+
+.shoutbox-detail__avatar {
+  width: 2.8em;
+  height: 2.8em;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.shoutbox-detail__who {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.shoutbox-detail__name {
+  font-weight: 800;
+  font-size: 1.05em;
+  color: var(--shoutbox-text);
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.shoutbox-detail__handle {
+  color: var(--shoutbox-muted);
+  font-size: var(--font-down-1);
+}
+
+.shoutbox-detail__time {
+  color: var(--shoutbox-muted);
+  font-size: var(--font-down-1);
+
+  &::before {
+    content: "\00b7";
+    margin-right: 0.5em;
+  }
+}
+
+.shoutbox-detail__content {
+  margin-top: 0.6em;
+  font-size: 1.06em;
+  line-height: 1.5;
+  color: var(--shoutbox-text);
+  overflow-wrap: anywhere;
+}
+
+.shoutbox-detail__stats {
+  display: flex;
+  gap: 1.6em;
+  margin-top: 0.9em;
+  padding-top: 0.7em;
+  border-top: 1px solid var(--jt-border, var(--primary-low));
+  color: var(--shoutbox-muted);
+  font-size: var(--font-down-1);
+
+  .number {
+    margin-left: 0.3em;
+  }
+
+  svg {
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.15em;
+  }
+}
+
+// reply compose row (X "Post your reply"): viewer avatar + input + pill
+.shoutbox__detail-compose {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7em;
+  padding: 0.8em 0;
+  border-bottom: 1px solid var(--jt-border, var(--primary-low));
+
+  // display:flex would override the hidden attribute (anon viewers / failed
+  // loads must not see the comment box)
+  &[hidden] {
+    display: none;
+  }
+}
+
+.shoutbox__detail-compose-avatar {
+  width: 2.4em;
+  height: 2.4em;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.shoutbox__detail-compose .shoutbox__comment-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.shoutbox__detail-compose .shoutbox__send {
+  font-size: var(--font-down-1);
+  padding: 0.35em 1.1em;
+  align-self: center;
+}
+
+// replies: hairline-separated rows, no cards
 .shoutbox__detail-list {
-  flex: 1 1 auto;
-  min-height: 3em;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.9em;
-  padding: 0.25em 0.1em;
 }
 
 .shoutbox__detail-reply {
   display: flex;
-  gap: 0.6em;
+  gap: 0.7em;
+  padding: 0.8em 0;
+  border-bottom: 1px solid var(--jt-border, var(--primary-low));
+
+  &:last-child {
+    border-bottom: none;
+  }
 }
 
 .shoutbox__detail-reply-avatar {
-  width: 2em;
-  height: 2em;
+  width: 2.2em;
+  height: 2.2em;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -1015,6 +1116,7 @@
 }
 
 .shoutbox__detail-reply-text {
+  margin-top: 0.15em;
   color: var(--shoutbox-text);
   font-size: var(--font-0);
   line-height: var(--line-height-medium);
@@ -1024,21 +1126,7 @@
 .shoutbox__detail-empty {
   color: var(--shoutbox-muted);
   font-size: var(--font-down-1);
-  padding: 0.5em 0;
-}
-
-.shoutbox__detail-compose {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4em;
-  border-top: 1px solid var(--shoutbox-border);
-  padding-top: 0.6em;
-
-  // display:flex would override the hidden attribute (anon viewers / failed
-  // loads must not see the comment box)
-  &[hidden] {
-    display: none;
-  }
+  padding: 0.8em 0;
 }
 
 .shoutbox__comment-input {

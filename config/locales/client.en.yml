@@ -48,6 +48,7 @@ en:
       comment_placeholder: "Write a comment…"
       detail_title: "{{n}} comments"
       detail_back: "Back"
+      detail_heading: "Post"
       more: "more"
       less: "less"
       detail_empty: "No comments yet"

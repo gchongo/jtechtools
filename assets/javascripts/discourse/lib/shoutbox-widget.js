@@ -2067,48 +2067,51 @@ export function mountShoutboxDetail(rootEl, { id }) {
 
   // invalid/missing id (bad URL) — render the failure state, skip the fetch
   if (!Number.isFinite(id) || id <= 0) {
-    const failCard = el("div", "shoutbox__item jt-card shoutbox-detail__card");
+    const failCard = el("div", "shoutbox-detail__fail");
     failCard.appendChild(el("li", "shoutbox__msg", i18n("shoutbox.load_failed")));
     wrap.appendChild(failCard);
     return { rootEl, destroy: () => (state.destroyed = true) };
   }
-  rootEl.appendChild(wrap);
 
+  // X-style header: back arrow + page title
+  const header = el("div", "shoutbox-detail__header");
   const back = el("a", "shoutbox-detail__back");
   back.href = "/shoutbox";
+  back.title = i18n("shoutbox.detail_back");
+  back.setAttribute("aria-label", i18n("shoutbox.detail_back"));
   back.innerHTML = iconHTML("arrow-left");
-  back.appendChild(el("span", null, i18n("shoutbox.detail_back")));
-  wrap.appendChild(back);
+  header.appendChild(back);
+  header.appendChild(el("span", "shoutbox-detail__heading", i18n("shoutbox.detail_heading")));
+  wrap.appendChild(header);
 
-  const card = el("div", "shoutbox__item jt-card shoutbox-detail__card");
-  card.appendChild(el("li", "shoutbox__msg", "\u2026"));
-  wrap.appendChild(card);
+  // parent message — borderless block, X-style
+  const parent = el("article", "shoutbox-detail__parent");
+  parent.appendChild(el("li", "shoutbox__msg", "\u2026"));
+  wrap.appendChild(parent);
 
+  // replies
   const listEl = el("div", "shoutbox__detail-list");
   wrap.appendChild(listEl);
 
+  // reply compose row (avatar + input + pill), like X's "Post your reply"
   const compose = el("div", "shoutbox__detail-compose");
   compose.hidden = true;
+  const cAvatar = el("img", "shoutbox__detail-compose-avatar");
+  cAvatar.alt = "";
   const ta = el("textarea", "shoutbox__comment-input");
   ta.rows = 1;
   ta.maxLength = 200;
   ta.placeholder = i18n("shoutbox.comment_placeholder");
+  compose.appendChild(cAvatar);
   compose.appendChild(ta);
-  const bar = el("div", "shoutbox__comment-bar");
-  const count = el("span", "shoutbox__count");
-  const actions = el("div", "shoutbox__composer-actions");
   const publish = el("button", "shoutbox__send");
   publish.type = "button";
   publish.textContent = i18n("shoutbox.publish");
   publish.disabled = true;
-  actions.appendChild(publish);
-  bar.appendChild(count);
-  bar.appendChild(actions);
-  compose.appendChild(bar);
+  compose.appendChild(publish);
   wrap.appendChild(compose);
 
   const update = () => {
-    count.textContent = i18n("shoutbox.count", { current: ta.value.length, max: ta.maxLength });
     publish.disabled = ta.value.trim().length === 0;
   };
   update();
@@ -2129,7 +2132,7 @@ export function mountShoutboxDetail(rootEl, { id }) {
     publish.textContent = i18n("shoutbox.posting");
     ajax("/shoutbox/messages.json", {
       type: "POST",
-      data: { message: text, reply_to_id: Number(id) },
+      data: { message: text, reply_to_id: id },
     })
       .then((payload) => {
         ta.value = "";
@@ -2157,45 +2160,60 @@ export function mountShoutboxDetail(rootEl, { id }) {
     }
   });
 
-  ajax(`/shoutbox/messages/${Number(id)}.json`)
+  ajax(`/shoutbox/messages/${id}.json`)
     .then((payload) => {
       if (state.destroyed) {
         return;
       }
       if (payload.viewer?.can_post) {
         compose.hidden = false;
+        if (payload.viewer.avatar_template) {
+          cAvatar.src = payload.viewer.avatar_template.replace("{size}", "48");
+        }
       }
       const m = payload.message;
 
-      card.replaceChildren();
-      const meta = el("div", "jt-card__meta");
-      const author = el("span", "shoutbox__author");
+      parent.replaceChildren();
+      const meta = el("div", "shoutbox-detail__meta");
       if (m.user?.avatar_template) {
-        const img = el("img", "shoutbox__author-avatar");
-        img.src = m.user.avatar_template.replace("{size}", "48");
+        const img = el("img", "shoutbox-detail__avatar");
+        img.src = m.user.avatar_template.replace("{size}", "96");
         img.alt = "";
         img.loading = "lazy";
-        author.appendChild(img);
+        meta.appendChild(img);
       }
-      const name = makeLink(userHref(m), "shoutbox__name");
+      const who = el("div", "shoutbox-detail__who");
+      const name = makeLink(userHref(m), "shoutbox-detail__name");
       name.textContent = m.user?.name || m.user?.username || "?";
-      author.appendChild(name);
-      author.appendChild(el("a", "shoutbox__handle", `@${m.user?.username || "?"}`));
-      meta.appendChild(author);
+      who.appendChild(name);
+      who.appendChild(el("span", "shoutbox-detail__handle", `@${m.user?.username || "?"}`));
       const date = new Date(m.created_at);
       if (!isNaN(date.getTime())) {
-        const when = el("span", "shoutbox-detail__time");
-        when.textContent = relativeAge(date, { format: "tiny" });
-        when.title = date.toLocaleString();
-        meta.appendChild(when);
+        who.appendChild(el("span", "shoutbox-detail__time", relativeAge(date, { format: "tiny" })));
       }
-      card.appendChild(meta);
+      meta.appendChild(who);
+      parent.appendChild(meta);
 
-      const body = el("div", "shoutbox__body");
-      const text = el("div", "shoutbox__text");
-      renderRichText(text, m.message || "");
-      body.appendChild(text);
-      card.appendChild(body);
+      const content = el("div", "shoutbox-detail__content");
+      renderRichText(content, m.message || "");
+      parent.appendChild(content);
+
+      // X-style stats strip under the parent message
+      const stats = el("div", "shoutbox-detail__stats");
+      const stat = (icon, n, title) => {
+        const s = el("span", "shoutbox-detail__stat");
+        s.title = title;
+        s.innerHTML = iconHTML(icon) + `<span class="number">${n || 0}</span>`;
+        return s;
+      };
+      stats.appendChild(
+        stat("far-comment", m.reply_count, i18n("shoutbox.comment")),
+      );
+      stats.appendChild(stat("heart", m.like_count, i18n("shoutbox.like")));
+      stats.appendChild(
+        stat("far-eye", m.views, i18n("shoutbox.views", { n: m.views || 0 })),
+      );
+      parent.appendChild(stats);
 
       const replies = payload.replies || [];
       listEl.replaceChildren();
@@ -2207,7 +2225,9 @@ export function mountShoutboxDetail(rootEl, { id }) {
     })
     .catch(() => {
       if (!state.destroyed) {
-        card.replaceChildren(el("li", "shoutbox__msg", i18n("shoutbox.load_failed")));
+        parent.replaceChildren(
+          el("li", "shoutbox__msg", i18n("shoutbox.load_failed")),
+        );
       }
     });
 
