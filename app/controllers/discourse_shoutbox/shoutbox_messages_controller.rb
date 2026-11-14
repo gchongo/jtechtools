@@ -123,7 +123,7 @@ module DiscourseShoutbox
           original_filename: upload.original_filename,
         }
       else
-        render_json_error(message: upload.errors.full_messages.join("\n"))
+        render_json_error(upload.errors.full_messages.join("\n"))
       end
     end
 
@@ -234,6 +234,7 @@ module DiscourseShoutbox
         can_post: current_user.present? && guardian.can_post_shoutbox?,
         max_length: SiteSetting.shoutbox_max_length,
         avatar_template: current_user&.avatar_template,
+        username: current_user&.username,
         staff: current_user&.staff? || false,
       }
     end

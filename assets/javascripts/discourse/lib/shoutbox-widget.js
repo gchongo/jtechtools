@@ -35,6 +35,8 @@ let editing = null; // { id } while a message is being edited
 let emojiMap = null;
 let emojiPromise = null;
 let tagListPromise = null;
+let searchQuery = ""; // sidebar search box filters the feed client-side
+let whatsNewExpanded = false; // sidebar "What's new" card toggle
 
 const maxId = () => {
   let max = lastSeenId;
@@ -607,6 +609,7 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
     showEmptyStateIfNeeded(widget);
     renderFoot(widget);
     renderSide(widget);
+    applySearchFilter(widget);
     scrollToTop(widget);
   };
 
@@ -617,6 +620,7 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
     // newest-first feed: new top-level rows go to the very top
     widget.els.list.insertBefore(buildRow(widget, m, { animate }), widget.els.list.firstChild);
     renderSide(widget);
+    applySearchFilter(widget);
     if (isNew || forceScroll) {
       scrollToTop(widget);
     }
@@ -635,6 +639,7 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
       widget.els.list.appendChild(replyRow);
     }
     renderSide(widget);
+    applySearchFilter(widget);
   };
 
   widget.removeRow = (id) => {
@@ -649,6 +654,7 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
       return;
     }
     old.replaceWith(buildRow(widget, m, {}));
+    applySearchFilter(widget);
   };
 
   widget.showError = () => {
@@ -1068,7 +1074,108 @@ function renderSide(widget) {
     entry.count += 1;
     counts.set(name, entry);
   }
-  const top = [...counts.values()].sort((a, b) => b.count - a.count).slice(0, 5);
+  const ranked = [...counts.values()].sort((a, b) => b.count - a.count);
+  const top = ranked.slice(0, 5);
+
+  // search box — built once per widget; it must survive renderSide rebuilds
+  // or typing would wipe focus and text
+  if (!widget.els.searchCard) {
+    const card = el("div", "shoutbox-side__card shoutbox-side__card--search");
+    const box = el("div", "shoutbox-side__search");
+    const icon = el("span", "shoutbox-side__search-icon");
+    icon.innerHTML = iconHTML("search");
+    const input = el("input", "shoutbox-side__search-input");
+    input.type = "search";
+    input.placeholder = i18n("shoutbox.side_search");
+    input.addEventListener("input", () => {
+      searchQuery = input.value;
+      widgets.forEach(applySearchFilter);
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        input.value = "";
+        searchQuery = "";
+        widgets.forEach(applySearchFilter);
+      }
+    });
+    box.appendChild(icon);
+    box.appendChild(input);
+    card.appendChild(box);
+    widget.els.searchCard = card;
+  }
+
+  // "What's new": latest moments as one-line excerpts, click jumps to the row
+  const latest = [...messages.values()]
+    .filter((m) => !m.reply_to_id)
+    .sort((a, b) => b.id - a.id);
+  const whatsNew = el("div", "shoutbox-side__card");
+  whatsNew.appendChild(el("div", "shoutbox-side__title", i18n("shoutbox.side_whats_new")));
+  const shown = latest.slice(0, whatsNewExpanded ? 20 : 5);
+  if (shown.length === 0) {
+    whatsNew.appendChild(el("div", "shoutbox-side__text", i18n("shoutbox.empty")));
+  } else {
+    shown.forEach((m) => {
+      const row = el("button", "shoutbox-side__excerpt-row");
+      row.type = "button";
+      row.appendChild(
+        el(
+          "div",
+          "shoutbox-side__excerpt-meta",
+          i18n("shoutbox.side_from", { username: m.user?.username || "?" }),
+        ),
+      );
+      row.appendChild(
+        el("div", "shoutbox-side__excerpt", excerptFor(m) || i18n("shoutbox.side_photo")),
+      );
+      row.addEventListener("click", () => jumpToMessage(widget, m.id));
+      whatsNew.appendChild(row);
+    });
+    if (latest.length > 5) {
+      const more = el("button", "shoutbox-side__more");
+      more.type = "button";
+      more.textContent = i18n(
+        whatsNewExpanded ? "shoutbox.side_show_less" : "shoutbox.side_show_more",
+      );
+      more.addEventListener("click", () => {
+        whatsNewExpanded = !whatsNewExpanded;
+        widgets.forEach(renderSide);
+      });
+      whatsNew.appendChild(more);
+    }
+  }
+
+  // suggested members: most active authors the viewer isn't
+  const suggested = el("div", "shoutbox-side__card");
+  suggested.appendChild(el("div", "shoutbox-side__title", i18n("shoutbox.side_suggested")));
+  const recs = ranked
+    .filter((e) => e.user?.username && e.user.username !== viewer?.username)
+    .slice(0, 5);
+  if (recs.length === 0) {
+    suggested.appendChild(
+      el("div", "shoutbox-side__text", i18n("shoutbox.side_suggested_empty")),
+    );
+  } else {
+    recs.forEach(({ user, count }) => {
+      const rowEl = el("div", "shoutbox-side__row");
+      if (user?.avatar_template) {
+        const img = el("img");
+        img.src = user.avatar_template.replace("{size}", "48");
+        img.alt = "";
+        img.loading = "lazy";
+        rowEl.appendChild(img);
+      }
+      const a = makeLink(`/u/${esc(user?.username).toLowerCase()}`, "shoutbox-side__name");
+      a.textContent = esc(user?.username);
+      rowEl.appendChild(a);
+      rowEl.appendChild(
+        el("span", "shoutbox-side__count", i18n("shoutbox.side_count", { n: count })),
+      );
+      suggested.appendChild(rowEl);
+    });
+    const more = makeLink("/u", "shoutbox-side__more");
+    more.textContent = i18n("shoutbox.side_show_more");
+    suggested.appendChild(more);
+  }
 
   const active = el("div", "shoutbox-side__card");
   active.appendChild(el("div", "shoutbox-side__title", i18n("shoutbox.side_active")));
@@ -1088,7 +1195,7 @@ function renderSide(widget) {
       a.textContent = esc(user?.username);
       rowEl.appendChild(a);
       rowEl.appendChild(
-        el("span", "shoutbox-side__count", i18n("shoutbox.side_count", { n: count }))
+        el("span", "shoutbox-side__count", i18n("shoutbox.side_count", { n: count })),
       );
       active.appendChild(rowEl);
     });
@@ -1097,13 +1204,79 @@ function renderSide(widget) {
   const about = el("div", "shoutbox-side__card");
   about.appendChild(el("div", "shoutbox-side__title", i18n("shoutbox.title")));
   about.appendChild(
-    el("p", "shoutbox-side__text", i18n("shoutbox.side_about", { n: messages.size }))
+    el("p", "shoutbox-side__text", i18n("shoutbox.side_about", { n: messages.size })),
   );
 
+  const cards = [widget.els.searchCard, whatsNew, suggested];
   if (widget.els.tagsCard) {
-    side.replaceChildren(active, about, widget.els.tagsCard);
+    cards.push(widget.els.tagsCard);
+  }
+  cards.push(active, about);
+  side.replaceChildren(...cards);
+}
+
+// One-line plain-text excerpt for the sidebar "What's new" rows.
+function excerptFor(m) {
+  return (m.message || "")
+    .replace(/!\[[^\]\n]*\]\([^)\s]+[^)]*\)/g, "📷")
+    .replace(/^#{1,3}\s+/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*\n]+)\*/g, "$1")
+    .replace(/`([^`\n]+)`/g, "$1")
+    .replace(/^[-*]\s+/gm, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
+
+// Scroll a message row into view and flash it (sidebar What's-new clicks).
+function jumpToMessage(widget, id) {
+  const row = widget.els.list.querySelector(`[data-id="${id}"]`);
+  if (!row) {
+    return;
+  }
+  row.scrollIntoView({ block: "center" });
+  row.classList.remove("shoutbox__item--new");
+  void row.offsetWidth; // restart the animation
+  row.classList.add("shoutbox__item--new");
+}
+
+// Hide feed rows that don't match the sidebar search box.
+function applySearchFilter(widget) {
+  const list = widget.els.list;
+  if (!list) {
+    return;
+  }
+  const q = searchQuery.trim().toLowerCase();
+  let visible = 0;
+  if (q) {
+    list.querySelectorAll(".shoutbox__item").forEach((li) => {
+      const m = messages.get(parseInt(li.dataset.id, 10));
+      const hit = (m?.message || "").toLowerCase().includes(q);
+      li.classList.toggle("shoutbox--hidden", !hit);
+      if (hit) {
+        visible++;
+      }
+    });
   } else {
-    side.replaceChildren(active, about);
+    list
+      .querySelectorAll(".shoutbox__item.shoutbox--hidden")
+      .forEach((li) => li.classList.remove("shoutbox--hidden"));
+  }
+  let empty = widget.els.searchEmpty;
+  if (!empty) {
+    empty = el("li", "shoutbox__msg shoutbox__search-empty");
+    widget.els.searchEmpty = empty;
+  }
+  empty.textContent = i18n("shoutbox.side_no_results");
+  if (q && visible === 0) {
+    if (!empty.isConnected) {
+      list.appendChild(empty);
+    }
+    empty.hidden = false;
+  } else {
+    empty.hidden = true;
+    empty.remove();
   }
 }
 
