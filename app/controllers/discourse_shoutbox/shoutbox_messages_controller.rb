@@ -67,6 +67,15 @@ module DiscourseShoutbox
 
       message = ShoutboxMessage.new(user: current_user, message: params[:message].to_s.strip, color: sanitize_color)
 
+      # attach the reply to its parent. Threads are one level deep: a reply
+      # to a reply attaches to the parent's parent (memos-style flattening).
+      # Without this the comment is stored as a standalone message and the
+      # UI has nothing to hang it under.
+      if (reply_to_id = params[:reply_to_id].to_i).positive?
+        parent = ShoutboxMessage.find_by(id: reply_to_id)
+        message.reply_to_id = parent&.reply_to_id.presence || parent&.id
+      end
+
       if message.save
         serialized = serialize_messages(message)
         MessageBus.publish(

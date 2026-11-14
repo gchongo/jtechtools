@@ -741,7 +741,13 @@ export function mountShoutbox(rootEl, { variant = "panel" } = {}) {
   if (loaded) {
     widget.refresh();
   } else {
-    loadEmojis();
+    loadEmojis().then(() => {
+      // the sidebar's What's-new excerpts render :emoji: from the map —
+      // re-render once it arrives so shortcodes become images
+      if (!widget.destroyed && widget.els.side) {
+        renderSide(widget);
+      }
+    });
   }
 
   return widget;
@@ -985,7 +991,9 @@ function startEdit(widget, m) {
 }
 
 // Replace a row's body with the editor; called from buildRow when the row
-// belongs to the message being edited.
+// belongs to the message being edited. Layout follows memos: borderless
+// textarea, image tiles, then a bottom bar with [+] (add images) on the left
+// and Cancel/Save on the right.
 function applyRowEditor(widget, li, m) {
   li.classList.add("shoutbox__item--editing");
   const body = li.querySelector(".shoutbox__body");
@@ -994,6 +1002,9 @@ function applyRowEditor(widget, li, m) {
     return;
   }
   foot?.style.setProperty("display", "none");
+  // wipe the rendered text first — the body must hold ONLY the editor, or
+  // the original content stays visible above the textarea (duplicated)
+  body.replaceChildren();
   body.classList.add("shoutbox__body--editing");
 
   const ta = el("textarea", "shoutbox__edit-input");
@@ -1014,16 +1025,28 @@ function applyRowEditor(widget, li, m) {
   });
   body.appendChild(ta);
 
+  // image tiles — rebuilt from editing.pending so uploads can land mid-edit
   const grid = el("div", "shoutbox__attachments");
-  grid.dataset.count = String(editing.pending.length);
-  if (editing.pending.length > 0) {
+  const renderGrid = () => {
+    grid.replaceChildren();
+    grid.dataset.count = String(editing.pending.length);
+    grid.hidden = editing.pending.length === 0;
     editing.pending.forEach((item) => {
       const cell = el("div", "shoutbox__att-preview");
-      cell.title = item.name;
-      const img = el("img", "shoutbox__att-img");
-      img.src = imageSrcFor(item.short_url);
-      img.alt = item.name;
-      cell.appendChild(img);
+      cell.title = item.status === "done" ? item.name : "";
+      if (item.status === "done" && item.short_url) {
+        const img = el("img", "shoutbox__att-img");
+        img.src = imageSrcFor(item.short_url);
+        img.alt = item.name;
+        cell.appendChild(img);
+      } else {
+        const ph = el("span", "shoutbox__att-ph");
+        ph.textContent = item.status === "failed" ? i18n("shoutbox.upload_failed") : "···";
+        if (item.status === "failed") {
+          ph.classList.add("shoutbox__att-ph--error");
+        }
+        cell.appendChild(ph);
+      }
       const remove = el("button", "shoutbox__att-remove");
       remove.type = "button";
       remove.title = i18n("shoutbox.attach_remove");
@@ -1031,27 +1054,83 @@ function applyRowEditor(widget, li, m) {
       remove.innerHTML = iconHTML("xmark");
       remove.addEventListener("click", () => {
         editing.pending = editing.pending.filter((p) => p !== item);
-        grid.dataset.count = String(editing.pending.length);
-        cell.remove();
+        renderGrid();
       });
       cell.appendChild(remove);
       grid.appendChild(cell);
     });
-    body.appendChild(grid);
-  }
+  };
+  renderGrid();
+  body.appendChild(grid);
+
+  // [+] adds images mid-edit (memos-style); hidden file input does the pick
+  const fileInput = el("input", "shoutbox__file-input");
+  fileInput.type = "file";
+  fileInput.accept = "image/*";
+  fileInput.multiple = true;
+  fileInput.hidden = true;
+  body.appendChild(fileInput);
 
   const actions = el("div", "shoutbox__edit-actions");
+  const left = el("div", "shoutbox__edit-left");
+  const addBtn = el("button", "shoutbox__composer-btn shoutbox__edit-add");
+  addBtn.type = "button";
+  addBtn.title = i18n("shoutbox.image");
+  addBtn.setAttribute("aria-label", i18n("shoutbox.image"));
+  addBtn.innerHTML = iconHTML("plus");
+  addBtn.addEventListener("click", () => fileInput.click());
+  left.appendChild(addBtn);
+  actions.appendChild(left);
+
+  fileInput.addEventListener("change", () => {
+    const files = [...(fileInput.files || [])];
+    fileInput.value = "";
+    if (files.length === 0) {
+      return;
+    }
+    const room = 4 - editing.pending.filter((p) => p.status !== "failed").length;
+    files.slice(0, Math.max(0, room)).forEach((file) => {
+      const item = {
+        id: `edit-up-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name: file.name,
+        status: "uploading",
+      };
+      editing.pending.push(item);
+      renderGrid();
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+      ajax("/shoutbox/uploads.json", {
+        type: "POST",
+        data: fd,
+        processData: false,
+        contentType: false,
+      })
+        .then((data) => {
+          item.short_url = data.short_url || data.url;
+          item.status = "done";
+        })
+        .catch(() => {
+          item.status = "failed";
+        })
+        .finally(() => {
+          renderGrid();
+        });
+    });
+  });
+
+  const right = el("div", "shoutbox__edit-right");
   const cancelBtn = el("button", "shoutbox__edit-cancel");
   cancelBtn.type = "button";
   cancelBtn.textContent = i18n("shoutbox.cancel");
   cancelBtn.addEventListener("click", () => cancelRowEdit(m));
-  actions.appendChild(cancelBtn);
+  right.appendChild(cancelBtn);
 
   const saveBtn = el("button", "shoutbox__send shoutbox__edit-save");
   saveBtn.type = "button";
   saveBtn.textContent = i18n("shoutbox.save");
   saveBtn.addEventListener("click", () => saveRowEdit(widget, ta, saveBtn));
-  actions.appendChild(saveBtn);
+  right.appendChild(saveBtn);
+  actions.appendChild(right);
 
   body.appendChild(actions);
   ta.focus();
@@ -1303,9 +1382,9 @@ function renderSide(widget) {
           i18n("shoutbox.side_from", { username: m.user?.username || "?" }),
         ),
       );
-      main.appendChild(
-        el("div", "shoutbox-side__excerpt", excerptFor(m) || i18n("shoutbox.side_photo")),
-      );
+      const excerpt = el("div", "shoutbox-side__excerpt");
+      appendExcerptContent(excerpt, excerptFor(m) || i18n("shoutbox.side_photo"));
+      main.appendChild(excerpt);
       row.appendChild(main);
       // trailing ⁝ appears on hover (memos-style)
       const dots = el("span", "shoutbox-side__excerpt-dots");
@@ -1411,6 +1490,29 @@ function excerptFor(m) {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 80);
+}
+
+// Render excerpt text into a node, turning :emoji: shortcodes into tiny
+// images via the shared emoji map (unknown codes stay as plain text).
+function appendExcerptContent(parent, text) {
+  const parts = text.split(/(:[a-zA-Z0-9_+-]+:)/g);
+  for (const part of parts) {
+    if (!part) {
+      continue;
+    }
+    const code = part.match(/^:([a-zA-Z0-9_+-]+):$/);
+    const url = code && emojiMap?.get(code[1]);
+    if (url) {
+      const img = el("img", "shoutbox-side__emoji");
+      img.src = url;
+      img.alt = part;
+      img.title = part;
+      img.loading = "lazy";
+      parent.appendChild(img);
+    } else {
+      parent.appendChild(document.createTextNode(part));
+    }
+  }
 }
 
 // Scroll a message row into view and flash it (sidebar What's-new clicks).

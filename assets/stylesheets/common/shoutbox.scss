@@ -306,6 +306,17 @@
   width: 100%;
 }
 
+// Page variant: frame the composer like a message card — same surface,
+// border and radius — so it reads as the first card of the feed (memos does
+// the same). (0,3,0) out-ranks the composer's padding/hairline rules.
+.shoutbox--page > .shoutbox__foot.jt-card__foot {
+  background: var(--jt-surface-raised);
+  border: 1px solid var(--jt-border, var(--primary-low));
+  border-radius: 1em;
+  // breathing room between the composer card and the first message card
+  margin-bottom: 0.9em;
+}
+
 .shoutbox__composer-row {
   display: flex;
   align-items: flex-start;
@@ -681,15 +692,28 @@
   }
 }
 
-.shoutbox-side__search-input {
+// (0,3,0): out-rank the theme's generic input styling, which paints its own
+// grey rounded background INSIDE the pill — that was the "double layer"
+.shoutbox-side .shoutbox-side__search .shoutbox-side__search-input {
   flex: 1;
   min-width: 0;
+  appearance: none;
+  -webkit-appearance: none;
   background: transparent;
   border: none;
   outline: none;
+  box-shadow: none;
   color: var(--shoutbox-text);
   font-size: 0.94em;
   padding: 0.75em 1em 0.75em 3em;
+  margin: 0;
+
+  &::-webkit-search-decoration,
+  &::-webkit-search-cancel-button,
+  &::-webkit-search-results-button {
+    -webkit-appearance: none;
+    display: none;
+  }
 
   &::placeholder {
     color: var(--shoutbox-muted);
@@ -739,6 +763,14 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+
+  // inline emoji images inside the excerpt
+  .shoutbox-side__emoji {
+    width: 1.1em;
+    height: 1.1em;
+    vertical-align: -0.2em;
+    margin: 0 0.05em;
+  }
 }
 
 .shoutbox-side__excerpt-dots {
@@ -1142,26 +1174,31 @@
 }
 
 .shoutbox__edit-input {
+  // mirrors .shoutbox__composer so the editor reads exactly like the composer
   width: 100%;
   background: transparent;
-  border: 1px solid var(--jt-border, var(--primary-low));
-  border-radius: var(--jt-radius-sm, 0.5em);
+  border: none;
   color: var(--shoutbox-text);
-  font: inherit;
-  line-height: 1.45;
-  padding: 0.5em 0.7em;
+  font-size: var(--font-0);
+  line-height: var(--line-height-medium);
+  padding: 0.35em 0;
   resize: vertical;
-  min-height: 3.5em;
+  min-height: 3em;
 
   &:focus {
     outline: none;
-    border-color: var(--jt-accent, var(--tertiary));
   }
 }
 
 .shoutbox__edit-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.shoutbox__edit-right {
+  display: flex;
   align-items: center;
   gap: 0.5em;
 }
@@ -1171,21 +1208,16 @@
   border: none;
   background: none;
   color: var(--shoutbox-muted);
-  font-size: var(--font-down-1);
+  font-size: var(--font-0);
   cursor: pointer;
-  padding: 0.4em 0.6em;
+  padding: 0.4em 0.8em;
   border-radius: 999px;
+  transition: background 0.15s ease, color 0.15s ease;
 
   &:hover {
     color: var(--shoutbox-text);
     background: var(--shoutbox-hover);
   }
-}
-
-// the save button reuses .shoutbox__send (accent pill) via a compound class
-.shoutbox__edit-save {
-  font-size: var(--font-down-1);
-  padding: 0.35em 1em;
 }
 // ── message rows use the theme jt-card anatomy ───────────────────────────────
 // Rows carry the same classes as the homepage topic cards (jt-card +
