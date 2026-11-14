@@ -799,6 +799,15 @@
 .shoutbox--page .shoutbox__actions {
   grid-column: 2;
   margin-top: 0.5em;
+  justify-content: flex-end;
+  max-width: none;
+}
+
+// on phones the five actions spread across the card instead
+@media (width < 48rem) {
+  .shoutbox--page .shoutbox__actions {
+    justify-content: space-between;
+  }
 }
 
 .shoutbox--page .shoutbox__action {
@@ -936,6 +945,7 @@
 // spans and buttons in the stats strip never carry a fill
 .shoutbox__item .jt-card__stat {
   background: transparent;
+  border: none;
 }
 
 // counts after the stat icons: smaller and quieter than the icons
